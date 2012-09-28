@@ -1,0 +1,322 @@
+#!/usr/bin/env python
+
+from array import array
+import argparse
+import base64
+import datetime
+import getpass
+import httplib
+import multiprocessing
+import re
+import sys
+import time
+import urllib2 as request
+import xml.etree.ElementTree as ElementTree
+import textwrap
+
+httplib.HTTPConnection.debuglevel = 1
+
+PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
+
+class WeekOfWork(object):
+    def __init__(self, year, week_number, project=None, customer=None, user=None):
+        self.projet = project
+        self.year = year
+        self.week_number = week_number
+        self.starting_day = time.strptime("%i %i 1" % (year, week_number), "%Y %W %w").tm_yday
+        self.users = set()
+        self.tasks = []
+
+        self.tasks = PHPReport.get_tasks_in_range(self.get_date_for_day_offset(0),
+                                                  self.get_date_for_day_offset(6),
+                                                  project=project, customer=customer, user=user)
+        for task in self.tasks:
+            self.users.add(task.user)
+
+    def filter_tasks(self, date=None, day_offset=None, user=None):
+        if date == None and day_offset != None:
+            date = self.get_date_for_day_offset(day_offset)
+
+        def filter_task(task):
+            if user != None and task.user != user:
+                return False
+            if date != None and task.date != date:
+                return False
+            return True
+        return filter(filter_task, self.tasks)
+
+    def get_date_for_day_offset(self, day_offset):
+        return datetime.datetime.strptime("%i-%i" % (self.year, self.starting_day + day_offset), "%Y-%j").date()
+
+    def get_string_for_day_offset(self, day_offset, format="%d %b"):
+        return self.get_date_for_day_offset(day_offset).strftime(format)
+
+    def time_worked(self, date=None, day_offset=None, user=None):
+        return sum([task.length() for task in self.filter_tasks(date, day_offset, user)], datetime.timedelta())
+
+class PHPReportObject(object):
+    @classmethod
+    def find(cls, id):
+        return cls.instances[id]
+
+    @classmethod
+    def load_all(cls, data, tag):
+        instances = PHPReport.create_objects_from_response(data, cls, tag)
+
+        cls.instances = {}
+        for instance in instances:
+            cls.instances[instance.id] = instance
+
+class Task(PHPReportObject):
+    def __init__(self, task_xml):
+        self.text = ""
+        self.story = ""
+
+        # These might be empty.
+        self.project_id = None
+        self.project = None
+
+        for child in task_xml.getchildren():
+            if child.tag == "id":
+                self.id = int(child.text)
+            elif child.tag == "ttype":
+                self.type = child.text
+            elif child.tag == "date":
+                self.date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+            elif child.tag == "initTime":
+                self.init_time = datetime.datetime.strptime(child.text, "%H:%M")
+            elif child.tag == "endTime":
+                self.end_time = datetime.datetime.strptime(child.text, "%H:%M")
+            elif child.tag == "story" and child.text != None:
+                self.story = child.text
+            elif child.tag == "telework":
+                self.telework = child.text
+            elif child.tag == "text" and child.text != None:
+                self.text = child.text
+            elif child.tag == "phase":
+                self.phase = child.text
+            elif child.tag == "userId":
+                self.user_id = int(child.text)
+                self.user = User.find(self.user_id)
+            elif child.tag == "projectId" and child.text:
+                self.project_id = int(child.text)
+                self.project = Project.find(self.project_id)
+            elif child.tag == "customerId":
+                self.customer_id = int(child.text)
+            elif child.tag == "taskStoryId":
+                self.task_story_id = child.text
+
+    def length(self):
+        return self.end_time - self.init_time
+
+class Project(PHPReportObject):
+    def __init__(self, project_xml):
+        for child in project_xml.getchildren():
+            if child.tag == "id":
+                self.id = int(child.text)
+            if child.tag == "description":
+                self.description = child.text
+
+    def match(self, term):
+        return self.description.lower().find(term) != -1
+
+class User(PHPReportObject):
+    def __init__(self, user_xml):
+        for child in user_xml.getchildren():
+            if child.tag == "id":
+                self.id = int(child.text)
+            if child.tag == "login":
+                self.login = child.text
+
+    def match(self, term):
+        return self.login.lower().find(term) != -1
+
+class Customer(PHPReportObject):
+    def __init__(self, customer_xml):
+        for child in customer_xml.getchildren():
+            if child.tag == "id":
+                self.id = int(child.text)
+            if child.tag == "name":
+                self.name = child.text
+
+    def match(self, term):
+        return self.name.lower().find(term) != -1
+
+def get_url_contents(url):
+    return PHPReport.get_contents_of_url(url)
+
+class PHPReport(object):
+    users = {}
+    projects = {}
+    customers = {}
+
+    @classmethod
+    def make_request(cls, url):
+        auth_header = 'Basic ' + base64.encodestring(cls.username + ':' + cls.password).strip()
+        return request.Request(url, None, {"Authorization" : auth_header})
+
+    @classmethod
+    def get_contents_of_url(cls, url):
+        def sanitize_url_for_display(url):
+            return url.replace(cls.password, "<<<your password>>>")
+
+        r = cls.make_request(url)
+        try:
+            return request.urlopen(r).read()
+        except Exception as e:
+            print "Could not complete request to %s" % sanitize_url_for_display(url)
+            sys.exit(1)
+
+    @classmethod
+    def login(cls, username, password):
+        cls.username = username
+        cls.password = password
+        cls.projects = {}
+        print "Logging in..."
+        response = cls.get_contents_of_url("%s/loginService.php?login=%s&password=%s" %
+                                            (PHPREPORT_ADDRESS, username, password))
+
+        cls.session_id = None
+        tree = ElementTree.fromstring(response)
+        for child in tree.getchildren():
+            if child.tag == "sessionId":
+                cls.session_id = child.text
+
+        if not(cls.session_id):
+            print "Could not find session id in login response: %s" % response
+            sys.exit(1)
+
+        # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
+        print "Loading PHPReport data..."
+        pool = multiprocessing.Pool(processes=3)
+        data = pool.map(get_url_contents, [
+            "%s/getCustomerProjectsService.php?sid=%s" % (PHPREPORT_ADDRESS, PHPReport.session_id),
+            "%s/getAllUsersService.php?sid=%s" % (PHPREPORT_ADDRESS, PHPReport.session_id),
+            "%s/getUserCustomersService.php?sid=%s" % (PHPREPORT_ADDRESS, PHPReport.session_id),
+        ])
+        Project.load_all(data[0], "project")
+        User.load_all(data[1], "user")
+        Customer.load_all(data[2], "customer")
+
+    @staticmethod
+    def create_objects_from_response(response, cls, tag):
+        return [cls(child) for child in ElementTree.fromstring(response).getchildren() if child.tag == tag]
+
+    @classmethod
+    def get_tasks_in_range(cls, start_date, end_date, project=None, customer=None, user=None):
+        tasks = []
+        url = "%s/getTasksFiltered.php?sid=%s&filterStartDate=%s&filterEndDate=%s&dateFormat=Y-m-d" % \
+              (PHPREPORT_ADDRESS, cls.session_id, str(start_date), str(end_date))
+        if project != None:
+            url += "&projectId=%i" % project.id
+        if customer != None:
+            url += "&customerId=%i" % customer.id
+        if user != None:
+            url += "&userId=%i" % user.id
+        return cls.create_objects_from_response(cls.get_contents_of_url(url), Task, "task")
+
+    @classmethod
+    def get_tasks_for_day_and_user(cls, date, user):
+        tasks = []
+        response = cls.get_contents_of_url("%s/getUserTasksService.php?sid=%s&login=%s&date=%s&dateFormat=Y-m-d" %
+                                           (PHPREPORT_ADDRESS, cls.session_id, user.login, str(date)))
+        return cls.create_objects_from_response(response, Task, "task")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--project', type=str)
+    parser.add_argument('-c', '--customer', type=str)
+    parser.add_argument('-u', '--user', type=str)
+    parser.add_argument('-y', '--year', type=int,
+                        default = datetime.datetime.today().isocalendar()[0])
+    parser.add_argument('-w', '--week', type=int,
+                        default = datetime.datetime.today().isocalendar()[1])
+    args = parser.parse_args()
+
+
+    if not args.project and not args.customer and not args.user:
+        print "Must give either a customer (-c) search string or a product search string (-p)"
+        sys.exit(1)
+
+    username = raw_input("Username: ")
+    password = getpass.getpass("Password: ")
+    PHPReport.login(username, password)
+
+    customer = None
+    project = None
+    user = None
+    def filter_instances(instances, search_string):
+        terms = search_string.lower().split(',')
+        def matches_all(instance):
+            for term in terms:
+                if not instance.match(term):
+                    return False
+            return True
+        return filter(matches_all, instances)
+
+    if args.project != None:
+        projects = filter_instances(Project.instances.values(), args.project)
+        if not len(projects):
+            print "Could not find any projects matching '%s'" % args.project
+            sys.exit(1)
+        project = projects[0]
+
+    if args.customer != None:
+        customers = filter_instances(Customer.instances.values(), args.customer)
+        if not len(customers):
+            print "Could not find any customers matching '%s'" % args.customer
+            sys.exit(1)
+        customer = customers[0]
+
+    if args.user != None:
+        users = [user for user in User.instances.values() if user.login == args.user]
+        if not len(users):
+            print "Could not find any customers matching '%s'" % args.customer
+            sys.exit(1)
+        user = users[0]
+
+    # FIXME: Factor this into a class.
+    work = WeekOfWork(args.year, args.week, project=project, customer=customer, user=user)
+    print "\nWeek %i of %i for" % (args.week, args.year),
+    if project:
+        print project.description
+    elif customer:
+        print customer.name
+    else:
+        print user.login
+
+    def format_delta(delta):
+        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+
+    print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
+          tuple([""] + [work.get_string_for_day_offset(x) for x in range(0, 7)] + ["Total"])
+    for user in work.users:
+        print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
+          tuple([user.login] + \
+                [format_delta(work.time_worked(day_offset=x, user=user)) for x in range(0, 7)] + \
+                [format_delta(work.time_worked(user=user))])
+    print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
+          tuple(["everyone"] + [format_delta(work.time_worked(day_offset=x)) for x in range(0, 7)])
+    print "\n    Total hours: %s\n" % format_delta(work.time_worked())
+
+    for user in work.users:
+        print "Stories for %s" % user.login
+        for day_offset in range(0, 7):
+            tasks_for_day = work.filter_tasks(day_offset=day_offset, user=user)
+            all_stories = " ".join([task.text + task.story for task in tasks_for_day])
+
+            # Strip out duplicated whitespace
+            all_stories = re.compile(r'\s+').sub(' ', all_stories).strip()
+
+            indent = 11 * ' ' # Enough to account for the day name offset.
+            width = 80 - len(indent)
+            all_stories = textwrap.fill(all_stories,
+                                        break_long_words=False, # Don't break URLs.
+                                        width=width,
+                                        initial_indent=indent,
+                                        subsequent_indent=indent).strip()
+            print "%9.9s: %s" % \
+                 (work.get_string_for_day_offset(day_offset, format="%A"),
+                   all_stories)
+        print
+
