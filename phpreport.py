@@ -182,16 +182,16 @@ class PHPReport(object):
         return [cls(child) for child in ElementTree.fromstring(response).getchildren() if child.tag == tag]
 
     @classmethod
-    def get_tasks_in_range(cls, start_date, end_date, project=None, customer=None, user=None):
+    def get_tasks_in_range(cls, start_date, end_date, filter=filter):
         tasks = []
         url = "%s/getTasksFiltered.php?sid=%s&filterStartDate=%s&filterEndDate=%s&dateFormat=Y-m-d" % \
               (cls.address, cls.session_id, str(start_date), str(end_date))
-        if project != None:
-            url += "&projectId=%i" % project.id
-        if customer != None:
-            url += "&customerId=%i" % customer.id
-        if user != None:
-            url += "&userId=%i" % user.id
+        if filter.project != None:
+            url += "&projectId=%i" % filter.project.id
+        if filter.customer != None:
+            url += "&customerId=%i" % filter.customer.id
+        if filter.user != None:
+            url += "&userId=%i" % filter.user.id
         return cls.create_objects_from_response(cls.get_contents_of_url(url), Task, "task")
 
     @classmethod
@@ -201,3 +201,19 @@ class PHPReport(object):
                                            (cls.address, cls.session_id, user.login, str(date)))
         return cls.create_objects_from_response(response, Task, "task")
 
+class TaskFilter(object):
+    def __init__(self, project=None, customer=None, user=None):
+        self.project = project
+        self.customer = customer
+        self.user = user
+
+    def __str__(self):
+        out = "("
+        if self.project:
+            out += " project='%s'" % self.project.description
+        if self.customer:
+            out += " customer='%s'" % self.customer.name
+        if self.user:
+            out += " user='%s'" % self.user
+        out += " )"
+        return out

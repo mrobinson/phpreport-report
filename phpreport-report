@@ -27,6 +27,7 @@ from phpreport import Customer
 from phpreport import Project
 from phpreport import PHPReport
 from phpreport import User
+from phpreport import TaskFilter
 
 import argparse
 import datetime
@@ -37,19 +38,15 @@ import sys
 import time
 
 class PeriodOfWork(object):
-    def __init__(self, start_date, num_days, project=None, customer=None, user=None):
-        self.project = project
-        self.customer = customer
-        self.user = user
-
+    def __init__(self, start_date, num_days, filter=filter):
         self.start_date = start_date
         self.num_days = num_days
-        self.users = set()
-        self.tasks = []
+        self.filter = filter
 
+        self.users = set()
         self.tasks = PHPReport.get_tasks_in_range(self.get_date_for_day_offset(0),
                                                   self.get_date_for_day_offset(num_days - 1),
-                                                  project=project, customer=customer, user=user)
+                                                  filter=filter)
         for task in self.tasks:
             self.users.add(task.user)
 
@@ -129,7 +126,7 @@ if __name__ == '__main__':
 
     # FIXME: Factor this into a class.
     start_date = datetime.datetime.strptime("%i %i 1" % (args.year, args.week), "%Y %W %w").date()
-    work = PeriodOfWork(start_date, 7, project=project, customer=customer, user=user)
+    work = PeriodOfWork(start_date, 7, TaskFilter(project=project, customer=customer, user=user))
     print "\nWeek %i of %i for" % (args.week, args.year),
     if project:
         print project.description
