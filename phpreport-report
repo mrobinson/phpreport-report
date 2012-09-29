@@ -36,17 +36,19 @@ import textwrap
 import sys
 import time
 
-class WeekOfWork(object):
-    def __init__(self, year, week_number, project=None, customer=None, user=None):
-        self.projet = project
-        self.year = year
-        self.week_number = week_number
-        self.starting_day = time.strptime("%i %i 1" % (year, week_number), "%Y %W %w").tm_yday
+class PeriodOfWork(object):
+    def __init__(self, start_date, num_days, project=None, customer=None, user=None):
+        self.project = project
+        self.customer = customer
+        self.user = user
+
+        self.start_date = start_date
+        self.num_days = num_days
         self.users = set()
         self.tasks = []
 
         self.tasks = PHPReport.get_tasks_in_range(self.get_date_for_day_offset(0),
-                                                  self.get_date_for_day_offset(6),
+                                                  self.get_date_for_day_offset(num_days - 1),
                                                   project=project, customer=customer, user=user)
         for task in self.tasks:
             self.users.add(task.user)
@@ -64,7 +66,7 @@ class WeekOfWork(object):
         return filter(filter_task, self.tasks)
 
     def get_date_for_day_offset(self, day_offset):
-        return datetime.datetime.strptime("%i-%i" % (self.year, self.starting_day + day_offset), "%Y-%j").date()
+        return self.start_date + datetime.timedelta(day_offset)
 
     def get_string_for_day_offset(self, day_offset, format="%d %b"):
         return self.get_date_for_day_offset(day_offset).strftime(format)
@@ -126,7 +128,8 @@ if __name__ == '__main__':
         user = users[0]
 
     # FIXME: Factor this into a class.
-    work = WeekOfWork(args.year, args.week, project=project, customer=customer, user=user)
+    start_date = datetime.datetime.strptime("%i %i 1" % (args.year, args.week), "%Y %W %w").date()
+    work = PeriodOfWork(start_date, 7, project=project, customer=customer, user=user)
     print "\nWeek %i of %i for" % (args.week, args.year),
     if project:
         print project.description
