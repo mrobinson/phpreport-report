@@ -62,14 +62,75 @@ class PeriodOfWork(object):
             return True
         return filter(filter_task, self.tasks)
 
+    def get_all_dates(self):
+        return [self.start_date + datetime.timedelta(offset) for offset in xrange(0, self.num_days)]
+
     def get_date_for_day_offset(self, day_offset):
         return self.start_date + datetime.timedelta(day_offset)
 
-    def get_string_for_day_offset(self, day_offset, format="%d %b"):
-        return self.get_date_for_day_offset(day_offset).strftime(format)
-
     def time_worked(self, date=None, day_offset=None, user=None):
         return sum([task.length() for task in self.filter_tasks(date, day_offset, user)], datetime.timedelta())
+
+class WeeklyReport(object):
+    def __init__(self, year, week, filter=filter):
+        self.filter = filter
+
+        week_as_string = "%i %i 1" % (year, week)
+        start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
+        self.work = PeriodOfWork(start_date, 7, filter=filter)
+
+    @staticmethod
+    def format_delta(delta):
+        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+
+    @staticmethod
+    def format_date(date):
+        return date.strftime("%d %b")
+
+    @staticmethod
+    def print_hours_line(first_column, hours_columns, last_column):
+        format_string = "%10.10s   " + (len(hours_columns) + 1) * '%-6.6s '
+        print format_string % tuple([first_column] + hours_columns + [last_column])
+
+    def print_hours(self):
+        all_dates = self.work.get_all_dates()
+        WeeklyReport.print_hours_line("", map(WeeklyReport.format_date, all_dates), "Total")
+        for user in self.work.users:
+            time_worked = [WeeklyReport.format_delta(self.work.time_worked(date=x, user=user)) for x in all_dates]
+            WeeklyReport.print_hours_line(user.login, time_worked, WeeklyReport.format_delta(self.work.time_worked(user=user)))
+
+        time_worked = [WeeklyReport.format_delta(self.work.time_worked(date=x)) for x in all_dates]
+        WeeklyReport.print_hours_line("everyone", time_worked, WeeklyReport.format_delta(self.work.time_worked()))
+
+    def get_stories_for_day_and_user(self, user, date):
+        tasks_for_day = self.work.filter_tasks(date=date, user=user)
+        all_stories = " ".join([task.text + task.story for task in tasks_for_day])
+
+        # Strip out duplicated whitespace
+        return re.compile(r'\s+').sub(' ', all_stories).strip()
+
+    def print_stories_for_user(self, user):
+        print "\nStories for %s" % user.login
+        all_dates = self.work.get_all_dates()
+        for date in all_dates:
+            all_stories = self.get_stories_for_day_and_user(user, date)
+
+            indent = 11 * ' ' # Enough to account for the day name offset.
+            width = 80 - len(indent)
+            all_stories = textwrap.fill(all_stories,
+                                        break_long_words=False, # Don't break URLs.
+                                        width=width,
+                                        initial_indent=indent,
+                                        subsequent_indent=indent).strip()
+            print "%9.9s: %s" % (date.strftime("%A"), all_stories)
+
+    def print_report(self):
+        print "\nWeek %i of %i for %s" % (args.week, args.year, self.filter)
+        self.print_hours()
+
+        for user in self.work.users:
+            self.print_stories_for_user(user)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -124,49 +185,5 @@ if __name__ == '__main__':
             sys.exit(1)
         user = users[0]
 
-    # FIXME: Factor this into a class.
-    start_date = datetime.datetime.strptime("%i %i 1" % (args.year, args.week), "%Y %W %w").date()
-    work = PeriodOfWork(start_date, 7, TaskFilter(project=project, customer=customer, user=user))
-    print "\nWeek %i of %i for" % (args.week, args.year),
-    if project:
-        print project.description
-    elif customer:
-        print customer.name
-    else:
-        print user.login
-
-    def format_delta(delta):
-        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
-
-    print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
-          tuple([""] + [work.get_string_for_day_offset(x) for x in range(0, 7)] + ["Total"])
-    for user in work.users:
-        print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
-          tuple([user.login] + \
-                [format_delta(work.time_worked(day_offset=x, user=user)) for x in range(0, 7)] + \
-                [format_delta(work.time_worked(user=user))])
-    print "%10.10s   %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s %-6.6s" % \
-          tuple(["everyone"] + [format_delta(work.time_worked(day_offset=x)) for x in range(0, 7)])
-    print "\n    Total hours: %s\n" % format_delta(work.time_worked())
-
-    for user in work.users:
-        print "Stories for %s" % user.login
-        for day_offset in range(0, 7):
-            tasks_for_day = work.filter_tasks(day_offset=day_offset, user=user)
-            all_stories = " ".join([task.text + task.story for task in tasks_for_day])
-
-            # Strip out duplicated whitespace
-            all_stories = re.compile(r'\s+').sub(' ', all_stories).strip()
-
-            indent = 11 * ' ' # Enough to account for the day name offset.
-            width = 80 - len(indent)
-            all_stories = textwrap.fill(all_stories,
-                                        break_long_words=False, # Don't break URLs.
-                                        width=width,
-                                        initial_indent=indent,
-                                        subsequent_indent=indent).strip()
-            print "%9.9s: %s" % \
-                 (work.get_string_for_day_offset(day_offset, format="%A"),
-                   all_stories)
-        print
-
+    report = WeeklyReport(args.year, args.week, TaskFilter(project=project, customer=customer, user=user))
+    report.print_report()
