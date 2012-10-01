@@ -80,27 +80,45 @@ class WeeklyReport(object):
         self.work = PeriodOfWork(start_date, 7, filter=filter)
 
     @staticmethod
-    def format_delta(delta):
-        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
-
-    @staticmethod
     def format_date(date):
         return date.strftime("%d %b")
 
     @staticmethod
-    def print_hours_line(first_column, hours_columns, last_column):
-        format_string = "%10.10s   " + (len(hours_columns) + 1) * '%-6.6s '
-        print format_string % tuple([first_column] + hours_columns + [last_column])
+    def print_table_row(columns):
+        format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
+        print format_string % tuple(columns)
+
+    def print_table(self, table):
+        for row in table:
+            self.print_table_row(row)
+
+    def print_report_header(self, header):
+        print "\n%s" % header
+
+    def print_section_header(self, header):
+        print "\n%s" % header
+
+    def time_worked(user=None, total=False):
+        def format_delta(delta):
+            return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+
+        if total:
+            return [format_delta(self.work.time_worked(user=user))]
+        all_dates = self.work.get_all_dates()
+        return [format_delta(self.work.time_worked(date=x, user=user)) for x in all_dates]
 
     def print_hours(self):
-        all_dates = self.work.get_all_dates()
-        WeeklyReport.print_hours_line("", map(WeeklyReport.format_date, all_dates), "Total")
+        table = []
+        table.append([""] + map(WeeklyReport.format_date, all_dates) + ["Total"])
         for user in self.work.users:
-            time_worked = [WeeklyReport.format_delta(self.work.time_worked(date=x, user=user)) for x in all_dates]
-            WeeklyReport.print_hours_line(user.login, time_worked, WeeklyReport.format_delta(self.work.time_worked(user=user)))
+            table.append([user.login] + \
+                         self.time_worked(user=user) + \
+                         self.time_worked(user=user, total=True))
+        table.append(["everyone"] + \
+                     self.time_worked() + \
+                     self.time_worked(total=True))
 
-        time_worked = [WeeklyReport.format_delta(self.work.time_worked(date=x)) for x in all_dates]
-        WeeklyReport.print_hours_line("everyone", time_worked, WeeklyReport.format_delta(self.work.time_worked()))
+        self.print_table(table)
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.work.filter_tasks(date=date, user=user)
@@ -110,7 +128,8 @@ class WeeklyReport(object):
         return re.compile(r'\s+').sub(' ', all_stories).strip()
 
     def print_stories_for_user(self, user):
-        print "\nStories for %s" % user.login
+        self.print_section_header("Stories for %s" % user.login)
+
         all_dates = self.work.get_all_dates()
         for date in all_dates:
             all_stories = self.get_stories_for_day_and_user(user, date)
@@ -125,7 +144,7 @@ class WeeklyReport(object):
             print "%9.9s: %s" % (date.strftime("%A"), all_stories)
 
     def print_report(self):
-        print "\nWeek %i of %i for %s" % (args.week, args.year, self.filter)
+        self.print_report_header("Week %i of %i for %s" % (args.week, args.year, self.filter))
         self.print_hours()
 
         for user in self.work.users:
