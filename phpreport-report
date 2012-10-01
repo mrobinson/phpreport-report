@@ -83,13 +83,17 @@ class WeeklyReport(object):
     def format_date(date):
         return date.strftime("%d %b")
 
-    def generate_table_row(self, columns):
+    def generate_table_row(self, columns, header=False):
         format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
         self.report_pieces.append(format_string % tuple(columns))
         self.report_pieces.append("\n")
 
     def generate_table(self, table):
-        for row in table:
+        if not len(table):
+            return
+
+        self.generate_table_row(table[0], header=True)
+        for row in table[1:]:
             self.generate_table_row(row)
 
     def generate_report_header(self, header):
@@ -154,8 +158,11 @@ class WeeklyReport(object):
         return "".join(self.report_pieces)
 
 class TwikiWeelyReport(WeeklyReport):
-    def generate_table_row(self, columns):
-        format_string = "| %s " + (len(columns) - 2) * "| %s " + "| %s |"
+    def generate_table_row(self, columns, header=False):
+        if header:
+            format_string = "| *%s* " + (len(columns) - 2) * "| *%s* " + "| *%s* |"
+        else:
+            format_string = "| *%s* " + (len(columns) - 2) * "| %s " + "| %s |"
         self.report_pieces.append(format_string % tuple(columns))
         self.report_pieces.append("\n")
 
