@@ -83,22 +83,22 @@ class WeeklyReport(object):
     def format_date(date):
         return date.strftime("%d %b")
 
-    @staticmethod
-    def print_table_row(columns):
+    def generate_table_row(self, columns):
         format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
-        print format_string % tuple(columns)
+        self.report_pieces.append(format_string % tuple(columns))
+        self.report_pieces.append("\n")
 
-    def print_table(self, table):
+    def generate_table(self, table):
         for row in table:
-            self.print_table_row(row)
+            self.generate_table_row(row)
 
-    def print_report_header(self, header):
-        print "\n%s" % header
+    def generate_report_header(self, header):
+        self.report_pieces.append("\n%s\n" % header)
 
-    def print_section_header(self, header):
-        print "\n%s" % header
+    def generate_section_header(self, header):
+        self.report_pieces.append("\n%s\n" % header)
 
-    def time_worked(user=None, total=False):
+    def time_worked(self, user=None, total=False):
         def format_delta(delta):
             return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
@@ -107,9 +107,9 @@ class WeeklyReport(object):
         all_dates = self.work.get_all_dates()
         return [format_delta(self.work.time_worked(date=x, user=user)) for x in all_dates]
 
-    def print_hours(self):
+    def generate_hours(self):
         table = []
-        table.append([""] + map(WeeklyReport.format_date, all_dates) + ["Total"])
+        table.append([""] + map(WeeklyReport.format_date, self.work.get_all_dates()) + ["Total"])
         for user in self.work.users:
             table.append([user.login] + \
                          self.time_worked(user=user) + \
@@ -118,7 +118,7 @@ class WeeklyReport(object):
                      self.time_worked() + \
                      self.time_worked(total=True))
 
-        self.print_table(table)
+        self.generate_table(table)
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.work.filter_tasks(date=date, user=user)
@@ -127,8 +127,8 @@ class WeeklyReport(object):
         # Strip out duplicated whitespace
         return re.compile(r'\s+').sub(' ', all_stories).strip()
 
-    def print_stories_for_user(self, user):
-        self.print_section_header("Stories for %s" % user.login)
+    def generate_stories_for_user(self, user):
+        self.generate_section_header("Stories for %s" % user.login)
 
         all_dates = self.work.get_all_dates()
         for date in all_dates:
@@ -141,14 +141,17 @@ class WeeklyReport(object):
                                         width=width,
                                         initial_indent=indent,
                                         subsequent_indent=indent).strip()
-            print "%9.9s: %s" % (date.strftime("%A"), all_stories)
+            self.report_pieces.append("%9.9s: %s\n" % (date.strftime("%A"), all_stories))
 
-    def print_report(self):
-        self.print_report_header("Week %i of %i for %s" % (args.week, args.year, self.filter))
-        self.print_hours()
+    def generate_report(self):
+        self.report_pieces = []
+        self.generate_report_header("Week %i of %i for %s" % (args.week, args.year, self.filter))
+        self.generate_hours()
 
         for user in self.work.users:
-            self.print_stories_for_user(user)
+            self.generate_stories_for_user(user)
+
+        return "".join(self.report_pieces)
 
 
 if __name__ == '__main__':
@@ -205,4 +208,4 @@ if __name__ == '__main__':
         user = users[0]
 
     report = WeeklyReport(args.year, args.week, TaskFilter(project=project, customer=customer, user=user))
-    report.print_report()
+    print report.generate_report()
