@@ -208,12 +208,8 @@ class TaskFilter(object):
         self.user = user
 
     def __str__(self):
-        out = "("
         if self.project:
-            out += " project='%s'" % self.project.description
+            return self.project.description
         if self.customer:
-            out += " customer='%s'" % self.customer.name
-        if self.user:
-            out += " user='%s'" % self.user
-        out += " )"
-        return out
+            return self.customer.name
+        return self.user.login
