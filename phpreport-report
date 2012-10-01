@@ -153,6 +153,25 @@ class WeeklyReport(object):
 
         return "".join(self.report_pieces)
 
+class TwikiWeelyReport(WeeklyReport):
+    def generate_table_row(self, columns):
+        format_string = "| %s " + (len(columns) - 2) * "| %s " + "| %s |"
+        self.report_pieces.append(format_string % tuple(columns))
+        self.report_pieces.append("\n")
+
+    def generate_report_header(self, header):
+        self.report_pieces.append("\n---++%s\n" % header)
+
+    def generate_section_header(self, header):
+        self.report_pieces.append("\n---++++%s\n" % header)
+
+    def generate_stories_for_user(self, user):
+        self.generate_section_header("Stories for %s" % user.login)
+
+        all_dates = self.work.get_all_dates()
+        for date in all_dates:
+            all_stories = self.get_stories_for_day_and_user(user, date)
+            self.report_pieces.append("   * *%s* - %s\n" % (date.strftime("%A"), all_stories))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -163,8 +182,8 @@ if __name__ == '__main__':
                         default = datetime.datetime.today().isocalendar()[0])
     parser.add_argument('-w', '--week', type=int,
                         default = datetime.datetime.today().isocalendar()[1])
+    parser.add_argument('-t', '--twiki', action="store_true")
     args = parser.parse_args()
-
 
     if not args.project and not args.customer and not args.user:
         print "Must give either a customer (-c) search string or a product search string (-p)"
@@ -207,5 +226,10 @@ if __name__ == '__main__':
             sys.exit(1)
         user = users[0]
 
-    report = WeeklyReport(args.year, args.week, TaskFilter(project=project, customer=customer, user=user))
+    report_class = WeeklyReport
+    if args.twiki:
+        report_class = TwikiWeelyReport
+    report = report_class(args.year, args.week, TaskFilter(project=project,
+                                                           customer=customer,
+                                                           user=user))
     print report.generate_report()
