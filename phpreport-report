@@ -30,12 +30,15 @@ from phpreport import User
 from phpreport import TaskFilter
 
 import argparse
+import base64
 import datetime
 import getpass
 import re
 import textwrap
 import sys
 import time
+import urllib
+import urllib2
 
 class PeriodOfWork(object):
     def __init__(self, start_date, num_days, filter=filter):
@@ -180,6 +183,31 @@ class TwikiWeelyReport(WeeklyReport):
             all_stories = self.get_stories_for_day_and_user(user, date)
             self.report_pieces.append("   * *%s* - %s\n" % (date.strftime("%A"), all_stories))
 
+class TwikiUploader(object):
+    def __init__(self, url, section="Main", username=None, password=None):
+        self.url = url
+        self.section = section
+        self.username=username
+        self.password=password
+
+    def upload(self, page_name, contents):
+        full_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
+        print "Uploading report to %s" % full_url
+
+        request = urllib2.Request(full_url)
+        request.add_data(urllib.urlencode({'text': contents}))
+
+        if self.username and self.password:
+            request.add_header('Authorization', 
+                               'Basic ' + \
+                               base64.urlsafe_b64encode("%s:%s" % (self.username,
+                                                                   self.password)))
+        try:
+            urllib2.urlopen(request)
+        except Exception as e:
+            print e
+            print "Could not complete upload to twiki at %s" % full_url
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--project', type=str)
@@ -190,6 +218,7 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--week', type=int,
                         default = datetime.datetime.today().isocalendar()[1])
     parser.add_argument('-t', '--twiki', action="store_true")
+    parser.add_argument('--upload', type=str)
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
@@ -234,9 +263,14 @@ if __name__ == '__main__':
         user = users[0]
 
     report_class = WeeklyReport
-    if args.twiki:
+    if args.twiki or args.upload:
         report_class = TwikiWeelyReport
     report = report_class(args.year, args.week, TaskFilter(project=project,
                                                            customer=customer,
                                                            user=user))
-    print report.generate_report()
+
+    if args.upload:
+        uploader = TwikiUploader(url=args.upload, username=username, password=password)
+        uploader.upload("Week%i-%i" % (args.week, args.year), report.generate_report())
+    else:
+        print report.generate_report()
