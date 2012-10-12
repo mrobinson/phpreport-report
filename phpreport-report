@@ -246,7 +246,8 @@ if __name__ == '__main__':
         if not len(projects):
             print "Could not find any projects matching '%s'" % args.project
             sys.exit(1)
-        project = projects[0]
+        projects.sort()
+        project = projects[-1]
 
     if args.customer != None:
         customers = filter_instances(Customer.instances.values(), args.customer)

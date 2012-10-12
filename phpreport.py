@@ -89,14 +89,33 @@ class Task(PHPReportObject):
 
 class Project(PHPReportObject):
     def __init__(self, project_xml):
+        self.init_date = None
+        self.end_date = None
+
         for child in project_xml.getchildren():
             if child.tag == "id":
                 self.id = int(child.text)
             if child.tag == "description":
                 self.description = child.text
+            if child.tag == "initDate" and child.text:
+                self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+            if child.tag == "endDate" and child.text:
+                self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
 
     def match(self, term):
         return self.description.lower().find(term) != -1
+
+    def has_ended(self):
+        return self.end_date and self.end_date() < datetime.date.today()
+
+    def choose_best(self, other):
+        if self.has_ended() and not other.has_ended():
+            return -1
+        if other.has_ended() and not self.has_ended():
+            return 1
+        if self.init_date and other.init_date:
+            return cmp(self.init_date, other.init_date)
+        return cmp(self.id, other.id)
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
