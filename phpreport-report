@@ -195,7 +195,6 @@ class TwikiUploader(object):
         full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
         print "Uploading report to %s" % full_view_url
 
-        print full_save_url
         request = urllib2.Request(full_save_url)
         request.add_data(urllib.urlencode({'text': contents}))
 
