@@ -23,7 +23,9 @@
 
 import base64
 import datetime
+import getpass
 import httplib
+import keyring
 import multiprocessing
 import sys
 import urllib2 as request
@@ -31,6 +33,45 @@ import xml.etree.ElementTree as ElementTree
 
 DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 httplib.HTTPConnection.debuglevel = 1
+
+class Credential(object):
+    all_credentials = {}
+
+    @classmethod
+    def for_url(cls, url, username=None):
+        if not username:
+            username = raw_input("Username: ")
+
+        key = (url, username)
+        if key in cls.all_credentials:
+            return cls.all_credentials[key]
+
+        password = keyring.get_password("PHPReport", username)
+        saved = True
+        if not password:
+            password = getpass.getpass("Password: ")
+            saved = False
+
+        credential = Credential(url, username, password, saved)
+        cls.all_credentials[key] = credential
+        return credential
+
+    def __init__(self, url, username, password, saved):
+        self.url = url
+        self.username = username
+        self.password = password
+        self.saved = saved
+
+    def save(self):
+        if self.saved:
+            return
+        if raw_input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
+            return
+        keyring.set_password("PHPReport", self.username, self.password)
+
+    def __eq__(self, other):
+        return self.url == other.url and self.username == other.username
+
 
 class PHPReportObject(object):
     @classmethod
@@ -149,13 +190,13 @@ class PHPReport(object):
 
     @classmethod
     def make_request(cls, url):
-        auth_header = 'Basic ' + base64.encodestring(cls.username + ':' + cls.password).strip()
+        auth_header = 'Basic ' + base64.encodestring(cls.credential.username + ':' + cls.credential.password).strip()
         return request.Request(url, None, {"Authorization" : auth_header})
 
     @classmethod
     def get_contents_of_url(cls, url):
         def sanitize_url_for_display(url):
-            return url.replace(cls.password, "<<<your password>>>")
+            return url.replace(cls.credential.password, "<<<your password>>>")
 
         r = cls.make_request(url)
         try:
@@ -165,14 +206,14 @@ class PHPReport(object):
             sys.exit(1)
 
     @classmethod
-    def login(cls, username, password, address=DEFAULT_PHPREPORT_ADDRESS):
-        cls.username = username
-        cls.password = password
+    def login(cls, address=DEFAULT_PHPREPORT_ADDRESS, username=None):
         cls.address = address
         cls.projects = {}
+        cls.credential = Credential.for_url(address, username)
+
         print "Logging in..."
         response = cls.get_contents_of_url("%s/loginService.php?login=%s&password=%s" %
-                                            (cls.address, username, password))
+                                            (cls.address, cls.credential.username, cls.credential.password))
 
         cls.session_id = None
         tree = ElementTree.fromstring(response)
@@ -181,8 +222,10 @@ class PHPReport(object):
                 cls.session_id = child.text
 
         if not(cls.session_id):
-            print "Could not find session id in login response: %s" % response
+            print "Could not find session id in login response, password likely incorrect: %s" % response
             sys.exit(1)
+
+        cls.credential.save()
 
         # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
         print "Loading PHPReport data..."

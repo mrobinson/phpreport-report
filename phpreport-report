@@ -32,7 +32,6 @@ from phpreport import TaskFilter
 import argparse
 import base64
 import datetime
-import getpass
 import re
 import textwrap
 import sys
@@ -211,6 +210,7 @@ class TwikiUploader(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--login', type=str)
     parser.add_argument('-p', '--project', type=str)
     parser.add_argument('-c', '--customer', type=str)
     parser.add_argument('-u', '--user', type=str)
@@ -226,9 +226,7 @@ if __name__ == '__main__':
         print "Must give either a customer (-c) search string or a product search string (-p)"
         sys.exit(1)
 
-    username = raw_input("Username: ")
-    password = getpass.getpass("Password: ")
-    PHPReport.login(username, password)
+    PHPReport.login(username=args.login)
 
     customer = None
     project = None
