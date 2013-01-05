@@ -87,6 +87,9 @@ class WeekOfWork(PeriodOfWork):
     def __str__(self):
         return "week %i of %i" % (self.week, self.year)
 
+    def wiki_string(self):
+        return "Week%i-%i" % (self.week, self.year)
+
     @classmethod
     def create_from_string(cls, string, filter):
         default_year = datetime.datetime.today().isocalendar()[0]
@@ -337,7 +340,9 @@ if __name__ == '__main__':
         report = report_class(time_periods[0])
 
     if args.upload:
-        uploader = TwikiUploader(url=args.upload, username=username, password=password)
-        uploader.upload("Week%i-%i" % (args.week, args.year), report.generate_report())
+        uploader = TwikiUploader(url=args.upload,
+                                 username=PHPReport.credential.username,
+                                 password=PHPReport.credential.password)
+        uploader.upload(time_periods[0].wiki_string(), report.generate_report())
     else:
         print report.generate_report()
