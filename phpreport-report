@@ -46,6 +46,8 @@ class PeriodOfWork(object):
         self.filter = filter
 
         self.users = set()
+
+        print "Fetching report for %s" % str(self)
         self.tasks = PHPReport.get_tasks_in_range(self.get_date_for_day_offset(0),
                                                   self.get_date_for_day_offset(num_days - 1),
                                                   filter=filter)
@@ -73,6 +75,18 @@ class PeriodOfWork(object):
     def time_worked(self, date=None, day_offset=None, user=None):
         return sum([task.length() for task in self.filter_tasks(date, day_offset, user)], datetime.timedelta())
 
+class WeekOfWork(PeriodOfWork):
+    def __init__(self, week, year, filter=filter):
+        self.week = week
+        self.year = year
+
+        week_as_string = "%i %i 1" % (year, week)
+        start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
+        super(WeekOfWork, self).__init__(start_date, 7, filter)
+
+    def __str__(self):
+        return "week %i of %i" % (self.week, self.year)
+
 def format_delta(delta):
     return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
@@ -92,10 +106,10 @@ class WeeklyReports(object):
 
         amount_worked_per_week = []
         for report in self.reports:
-            amount = report.work.time_worked()
+            amount = report.week.time_worked()
             amount_worked_per_week.append(amount)
             output += "%-20.20s  %-10.10s\n" % \
-                      ("Week %i of %i:" % (report.week[1], report.week[0]), format_delta(amount))
+                      (str(report.week), format_delta(amount))
 
         output += "%-20.20s  %-10.10s\n" % ("Total:", format_delta(sum(amount_worked_per_week, datetime.timedelta())))
 
@@ -104,13 +118,7 @@ class WeeklyReports(object):
 class WeeklyReport(object):
     def __init__(self, week, filter=filter):
         self.filter = filter
-        self.week = week
-
-        week_as_string = "%i %i 1" % (week[0], week[1])
-        start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
-
-        print "Fetching report for week %i of %i" % (week[1], week[0])
-        self.work = PeriodOfWork(start_date, 7, filter=filter)
+        self.week = WeekOfWork(week[1], week[0], filter=filter)
 
     @staticmethod
     def format_date(date):
@@ -137,14 +145,14 @@ class WeeklyReport(object):
 
     def time_worked(self, user=None, total=False):
         if total:
-            return [format_delta(self.work.time_worked(user=user))]
-        all_dates = self.work.get_all_dates()
-        return [format_delta(self.work.time_worked(date=x, user=user)) for x in all_dates]
+            return [format_delta(self.week.time_worked(user=user))]
+        all_dates = self.week.get_all_dates()
+        return [format_delta(self.week.time_worked(date=x, user=user)) for x in all_dates]
 
     def generate_hours(self):
         table = []
-        table.append([""] + map(WeeklyReport.format_date, self.work.get_all_dates()) + ["Total"])
-        for user in self.work.users:
+        table.append([""] + map(WeeklyReport.format_date, self.week.get_all_dates()) + ["Total"])
+        for user in self.week.users:
             table.append([user.login] + \
                          self.time_worked(user=user) + \
                          self.time_worked(user=user, total=True))
@@ -155,7 +163,7 @@ class WeeklyReport(object):
         self.generate_table(table)
 
     def get_stories_for_day_and_user(self, user, date):
-        tasks_for_day = self.work.filter_tasks(date=date, user=user)
+        tasks_for_day = self.week.filter_tasks(date=date, user=user)
         all_stories = " ".join([task.text + task.story for task in tasks_for_day])
 
         # Strip out duplicated whitespace
@@ -164,7 +172,7 @@ class WeeklyReport(object):
     def generate_stories_for_user(self, user):
         self.generate_section_header("Stories for %s" % user.login)
 
-        all_dates = self.work.get_all_dates()
+        all_dates = self.week.get_all_dates()
         for date in all_dates:
             all_stories = self.get_stories_for_day_and_user(user, date)
 
@@ -179,10 +187,10 @@ class WeeklyReport(object):
 
     def generate_report(self):
         self.report_pieces = []
-        self.generate_report_header("Week %i of %i for %s" % (self.week[1], self.week[0], self.filter))
+        self.generate_report_header("%s for %s" % (str(self.week), self.filter))
         self.generate_hours()
 
-        for user in self.work.users:
+        for user in self.week.users:
             self.generate_stories_for_user(user)
 
         return "".join(self.report_pieces)
@@ -205,7 +213,7 @@ class TwikiWeelyReport(WeeklyReport):
     def generate_stories_for_user(self, user):
         self.generate_section_header("Stories for %s" % user.login)
 
-        all_dates = self.work.get_all_dates()
+        all_dates = self.week.get_all_dates()
         for date in all_dates:
             all_stories = self.get_stories_for_day_and_user(user, date)
             self.report_pieces.append("   * *%s* - %s\n" % (date.strftime("%A"), all_stories))
