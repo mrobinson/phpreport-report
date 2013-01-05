@@ -87,38 +87,66 @@ class WeekOfWork(PeriodOfWork):
     def __str__(self):
         return "week %i of %i" % (self.week, self.year)
 
+    @classmethod
+    def create_from_string(cls, string, filter):
+        default_year = datetime.datetime.today().isocalendar()[0]
+
+        def split_single(string):
+            if not '/' in string:
+                return default_year, int(string.strip())
+            else:
+                week, year = string.split('/')
+                return int(year.strip()), int(week.strip())
+
+        if not "-" in string and not "," in string:
+            split = split_single(string)
+            return [cls(split[1], split[0], filter)]
+
+        result = []
+        for week_range in string.split(","):
+            range_bounds = week_range.split("-")
+
+            if len(range_bounds) == 1:
+                start = end = result.append(split_single(range_bounds))
+            else:
+                # FIXME: We don't yet support spanning a year.
+                start = split_single(range_bounds[0])
+                end = split_single(range_bounds[1])
+
+            for week in range(start[1], end[1] + 1):
+                result.append(cls(week, start[0], filter))
+        return result
+
+
 def format_delta(delta):
     return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
-class WeeklyReports(object):
-    def __init__(self, weeks, filter=filter):
-        self.weeks = weeks
+class AggregateReport(object):
+    def __init__(self, time_periods):
+        self.time_periods = time_periods
         self.filter = filter
-        self.reports = [WeeklyReport(week, filter) for week in weeks]
 
     def generate_report(self):
         self.report_pieces = []
         output = ""
-        output += "\n\nWeek %i of %i to week %i of %i for %s\n" % \
-            (self.weeks[0][1], self.weeks[0][0],
-             self.weeks[-1][1], self.weeks[-1][0],
-             self.filter)
+        output += "\n\n%s to %s for %s\n" % \
+            (self.time_periods[0],
+             self.time_periods[1],
+             self.time_periods[0].filter)
 
-        amount_worked_per_week = []
-        for report in self.reports:
-            amount = report.week.time_worked()
-            amount_worked_per_week.append(amount)
+        total = datetime.timedelta()
+        for period in self.time_periods:
+            amount = period.time_worked()
+            total += amount
             output += "%-20.20s  %-10.10s\n" % \
-                      (str(report.week), format_delta(amount))
+                      (str(period), format_delta(amount))
 
-        output += "%-20.20s  %-10.10s\n" % ("Total:", format_delta(sum(amount_worked_per_week, datetime.timedelta())))
-
+        output += "%-20.20s  %-10.10s\n" % ("Total:", format_delta(total))
         return output
 
-class WeeklyReport(object):
-    def __init__(self, week, filter=filter):
-        self.filter = filter
-        self.week = WeekOfWork(week[1], week[0], filter=filter)
+class DetailedReport(object):
+    def __init__(self, time_period):
+        self.time_period = time_period
 
     @staticmethod
     def format_date(date):
@@ -145,14 +173,14 @@ class WeeklyReport(object):
 
     def time_worked(self, user=None, total=False):
         if total:
-            return [format_delta(self.week.time_worked(user=user))]
-        all_dates = self.week.get_all_dates()
-        return [format_delta(self.week.time_worked(date=x, user=user)) for x in all_dates]
+            return [format_delta(self.time_period.time_worked(user=user))]
+        all_dates = self.time_period.get_all_dates()
+        return [format_delta(self.time_period.time_worked(date=x, user=user)) for x in all_dates]
 
     def generate_hours(self):
         table = []
-        table.append([""] + map(WeeklyReport.format_date, self.week.get_all_dates()) + ["Total"])
-        for user in self.week.users:
+        table.append([""] + map(DetailedReport.format_date, self.time_period.get_all_dates()) + ["Total"])
+        for user in self.time_period.users:
             table.append([user.login] + \
                          self.time_worked(user=user) + \
                          self.time_worked(user=user, total=True))
@@ -163,7 +191,7 @@ class WeeklyReport(object):
         self.generate_table(table)
 
     def get_stories_for_day_and_user(self, user, date):
-        tasks_for_day = self.week.filter_tasks(date=date, user=user)
+        tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
         all_stories = " ".join([task.text + task.story for task in tasks_for_day])
 
         # Strip out duplicated whitespace
@@ -172,7 +200,7 @@ class WeeklyReport(object):
     def generate_stories_for_user(self, user):
         self.generate_section_header("Stories for %s" % user.login)
 
-        all_dates = self.week.get_all_dates()
+        all_dates = self.time_period.get_all_dates()
         for date in all_dates:
             all_stories = self.get_stories_for_day_and_user(user, date)
 
@@ -187,15 +215,15 @@ class WeeklyReport(object):
 
     def generate_report(self):
         self.report_pieces = []
-        self.generate_report_header("%s for %s" % (str(self.week), self.filter))
+        self.generate_report_header("%s for %s" % (str(self.time_period), self.time_period.filter))
         self.generate_hours()
 
-        for user in self.week.users:
+        for user in self.time_period.users:
             self.generate_stories_for_user(user)
 
         return "".join(self.report_pieces)
 
-class TwikiWeelyReport(WeeklyReport):
+class TwikiDetailedReport(DetailedReport):
     def generate_table_row(self, columns, header=False):
         if header:
             format_string = "| *%s* " + (len(columns) - 2) * "| *%s* " + "| *%s* |"
@@ -213,7 +241,7 @@ class TwikiWeelyReport(WeeklyReport):
     def generate_stories_for_user(self, user):
         self.generate_section_header("Stories for %s" % user.login)
 
-        all_dates = self.week.get_all_dates()
+        all_dates = self.time_period.get_all_dates()
         for date in all_dates:
             all_stories = self.get_stories_for_day_and_user(user, date)
             self.report_pieces.append("   * *%s* - %s\n" % (date.strftime("%A"), all_stories))
@@ -243,33 +271,6 @@ class TwikiUploader(object):
         except Exception as e:
             print e
             print "Could not complete upload to twiki at %s" % full_save_url
-
-def parse_week_ranges(week_ranges):
-    default_year = datetime.datetime.today().isocalendar()[0]
-
-    print week_ranges
-    def split_single(string):
-        if not '/' in string:
-            return default_year, int(string.strip())
-        else:
-            week, year = string.split('/')
-            return int(year.strip()), int(week.strip())
-
-    result = []
-    if not "-" in week_ranges and not "," in week_ranges:
-        return [split_single(week_ranges)]
-
-    for week_range in week_ranges.split(","):
-        start_and_end = week_ranges.split("-")
-        if len(start_and_end) == 1:
-            result.append(split_single(start_and_end))
-        else:
-            # FIXME: We don't yet support spanning a year.
-            start = split_single(start_and_end[0])
-            end = split_single(start_and_end[1])
-            for week in range(start[1], end[1] + 1):
-                result.append((start[0], week))
-    return result
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -324,15 +325,16 @@ if __name__ == '__main__':
         user = users[0]
 
     task_filter = TaskFilter(project=project, customer=customer, user=user)
-    weeks = parse_week_ranges(args.week)
-    if len(weeks) > 1:
-        report = WeeklyReports(weeks, task_filter)
+    time_periods = WeekOfWork.create_from_string(args.week, task_filter)
+
+    if len(time_periods) > 1:
+        report = AggregateReport(time_periods)
         args.upload = False # No Twiki support for week ranges yet.
     else:
-        report_class = WeeklyReport
+        report_class = DetailedReport
         if args.twiki or args.upload:
-            report_class = TwikiWeelyReport
-        report = report_class(weeks[0], task_filter)
+            report_class = TwikiDetailedReport
+        report = report_class(time_periods[0])
 
     if args.upload:
         uploader = TwikiUploader(url=args.upload, username=username, password=password)
