@@ -244,18 +244,31 @@ class TwikiUploader(object):
             print e
             print "Could not complete upload to twiki at %s" % full_save_url
 
-def parse_week_ranges(week_ranges, year):
+def parse_week_ranges(week_ranges):
+    default_year = datetime.datetime.today().isocalendar()[0]
+
+    print week_ranges
+    def split_single(string):
+        if not '/' in string:
+            return default_year, int(string.strip())
+        else:
+            week, year = string.split('/')
+            return int(year.strip()), int(week.strip())
+
     result = []
     if not "-" in week_ranges and not "," in week_ranges:
-        return [(year, int(week_ranges.strip()))]
+        return [split_single(week_ranges)]
 
     for week_range in week_ranges.split(","):
         start_and_end = week_ranges.split("-")
         if len(start_and_end) == 1:
-            result.append((year, int(start_and_end.strip())))
+            result.append(split_single(start_and_end))
         else:
-            for week in range(int(start_and_end[0].strip()), int(start_and_end[1].strip()) + 1):
-                result.append((year, week))
+            # FIXME: We don't yet support spanning a year.
+            start = split_single(start_and_end[0])
+            end = split_single(start_and_end[1])
+            for week in range(start[1], end[1] + 1):
+                result.append((start[0], week))
     return result
 
 if __name__ == '__main__':
@@ -264,8 +277,6 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', type=str)
     parser.add_argument('-c', '--customer', type=str)
     parser.add_argument('-u', '--user', type=str)
-    parser.add_argument('-y', '--year', type=int,
-                        default = datetime.datetime.today().isocalendar()[0])
     parser.add_argument('-w', '--week', type=str,
                         default = str(datetime.datetime.today().isocalendar()[1]))
     parser.add_argument('-t', '--twiki', action="store_true")
@@ -313,7 +324,7 @@ if __name__ == '__main__':
         user = users[0]
 
     task_filter = TaskFilter(project=project, customer=customer, user=user)
-    weeks = parse_week_ranges(args.week, args.year)
+    weeks = parse_week_ranges(args.week)
     if len(weeks) > 1:
         report = WeeklyReports(weeks, task_filter)
         args.upload = False # No Twiki support for week ranges yet.
