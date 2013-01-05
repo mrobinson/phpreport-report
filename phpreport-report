@@ -73,12 +73,43 @@ class PeriodOfWork(object):
     def time_worked(self, date=None, day_offset=None, user=None):
         return sum([task.length() for task in self.filter_tasks(date, day_offset, user)], datetime.timedelta())
 
-class WeeklyReport(object):
-    def __init__(self, year, week, filter=filter):
-        self.filter = filter
+def format_delta(delta):
+    return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
-        week_as_string = "%i %i 1" % (year, week)
+class WeeklyReports(object):
+    def __init__(self, weeks, filter=filter):
+        self.weeks = weeks
+        self.filter = filter
+        self.reports = [WeeklyReport(week, filter) for week in weeks]
+
+    def generate_report(self):
+        self.report_pieces = []
+        output = ""
+        output += "\n\nWeek %i of %i to week %i of %i for %s\n" % \
+            (self.weeks[0][1], self.weeks[0][0],
+             self.weeks[-1][1], self.weeks[-1][0],
+             self.filter)
+
+        amount_worked_per_week = []
+        for report in self.reports:
+            amount = report.work.time_worked()
+            amount_worked_per_week.append(amount)
+            output += "%-20.20s  %-10.10s\n" % \
+                      ("Week %i of %i:" % (report.week[1], report.week[0]), format_delta(amount))
+
+        output += "%-20.20s  %-10.10s\n" % ("Total:", format_delta(sum(amount_worked_per_week, datetime.timedelta())))
+
+        return output
+
+class WeeklyReport(object):
+    def __init__(self, week, filter=filter):
+        self.filter = filter
+        self.week = week
+
+        week_as_string = "%i %i 1" % (week[0], week[1])
         start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
+
+        print "Fetching report for week %i of %i" % (week[1], week[0])
         self.work = PeriodOfWork(start_date, 7, filter=filter)
 
     @staticmethod
@@ -105,9 +136,6 @@ class WeeklyReport(object):
         self.report_pieces.append("\n%s\n" % header)
 
     def time_worked(self, user=None, total=False):
-        def format_delta(delta):
-            return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
-
         if total:
             return [format_delta(self.work.time_worked(user=user))]
         all_dates = self.work.get_all_dates()
@@ -151,7 +179,7 @@ class WeeklyReport(object):
 
     def generate_report(self):
         self.report_pieces = []
-        self.generate_report_header("Week %i of %i for %s" % (args.week, args.year, self.filter))
+        self.generate_report_header("Week %i of %i for %s" % (self.week[1], self.week[0], self.filter))
         self.generate_hours()
 
         for user in self.work.users:
@@ -208,6 +236,20 @@ class TwikiUploader(object):
             print e
             print "Could not complete upload to twiki at %s" % full_save_url
 
+def parse_week_ranges(week_ranges, year):
+    result = []
+    if not "-" in week_ranges and not "," in week_ranges:
+        return [(year, int(week_ranges.strip()))]
+
+    for week_range in week_ranges.split(","):
+        start_and_end = week_ranges.split("-")
+        if len(start_and_end) == 1:
+            result.append((year, int(start_and_end.strip())))
+        else:
+            for week in range(int(start_and_end[0].strip()), int(start_and_end[1].strip()) + 1):
+                result.append((year, week))
+    return result
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--login', type=str)
@@ -216,8 +258,8 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--user', type=str)
     parser.add_argument('-y', '--year', type=int,
                         default = datetime.datetime.today().isocalendar()[0])
-    parser.add_argument('-w', '--week', type=int,
-                        default = datetime.datetime.today().isocalendar()[1])
+    parser.add_argument('-w', '--week', type=str,
+                        default = str(datetime.datetime.today().isocalendar()[1]))
     parser.add_argument('-t', '--twiki', action="store_true")
     parser.add_argument('--upload', type=str)
     args = parser.parse_args()
@@ -262,12 +304,16 @@ if __name__ == '__main__':
             sys.exit(1)
         user = users[0]
 
-    report_class = WeeklyReport
-    if args.twiki or args.upload:
-        report_class = TwikiWeelyReport
-    report = report_class(args.year, args.week, TaskFilter(project=project,
-                                                           customer=customer,
-                                                           user=user))
+    task_filter = TaskFilter(project=project, customer=customer, user=user)
+    weeks = parse_week_ranges(args.week, args.year)
+    if len(weeks) > 1:
+        report = WeeklyReports(weeks, task_filter)
+        args.upload = False # No Twiki support for week ranges yet.
+    else:
+        report_class = WeeklyReport
+        if args.twiki or args.upload:
+            report_class = TwikiWeelyReport
+        report = report_class(weeks[0], task_filter)
 
     if args.upload:
         uploader = TwikiUploader(url=args.upload, username=username, password=password)
