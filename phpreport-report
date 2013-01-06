@@ -248,13 +248,36 @@ class TextFormatter(object):
         return "".join(self.pieces)
 
 class TwikiFormatter(TextFormatter):
-    def generate_table_row(self, columns, header=False):
+    def generate_table_row(self, columns, header=False, highlight_first=True):
+        first = "| *%s* "
+        if not highlight_first:
+            first = "| %s"
+
         if header:
-            format_string = "| *%s* " + (len(columns) - 2) * "| *%s* " + "| *%s* |"
+            format_string = first + (len(columns) - 2) * "| *%s* " + "| *%s* |"
         else:
-            format_string = "| *%s* " + (len(columns) - 2) * "| %s " + "| %s |"
+            format_string = first + (len(columns) - 2) * "| %s " + "| %s |"
+
         self.pieces.append(format_string % tuple(columns))
         self.pieces.append("\n")
+
+    def generate_table(self, table, has_headers=True):
+        if len(table) < 10 or has_headers:
+            return super(TwikiUploader, self).generate_table(self, table, has_headers)
+
+        def chunks_of_n(l, n):
+            for i in xrange(0, len(l), n):
+                yield l[i:i+n]
+
+        def transpose_to_columns(lists):
+            return map(lambda *row: [elem or ['', ''] for elem in row], *lists)
+
+        table = chunks_of_n(table, 10)
+        table = transpose_to_columns(table)
+        for row in table:
+            # Now we have a row of pairs, but we need to flatten it.
+            row = sum(row, [])
+            self.generate_table_row(row, highlight_first=False)
 
     def generate_header(self, header):
         self.pieces.append("\n---++%s\n" % header)
