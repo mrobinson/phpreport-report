@@ -141,9 +141,12 @@ class AggregateReport(object):
             amount = period.time_worked()
             total += amount
             table_contents.append([str(period), format_delta(amount)])
-        self.formatter.generate_table(table_contents)
+        self.formatter.generate_table(table_contents, has_headers=False)
         self.formatter.generate_header("Total hours worked: %s" % format_delta(total))
         return self.formatter.flatten()
+
+    def wiki_string(self):
+        return "%sTo%s" % (self.time_periods[0].wiki_string(), self.time_periods[-1].wiki_string())
 
 class DetailedReport(object):
     def __init__(self, time_period, formatter):
@@ -195,6 +198,9 @@ class DetailedReport(object):
             self.generate_stories_for_user(user)
         return self.formatter.flatten()
 
+    def wiki_string(self):
+        return self.time_periods.wiki_string()
+
 class TextFormatter(object):
     def __init__(self):
         self.pieces = []
@@ -204,11 +210,11 @@ class TextFormatter(object):
         self.pieces.append(format_string % tuple(columns))
         self.pieces.append("\n")
 
-    def generate_table(self, table):
+    def generate_table(self, table, has_headers=True):
         if not len(table):
             return
 
-        self.generate_table_row(table[0], header=True)
+        self.generate_table_row(table[0], header=has_headers)
         for row in table[1:]:
             self.generate_table_row(row)
 
@@ -345,7 +351,6 @@ if __name__ == '__main__':
 
     if len(time_periods) > 1:
         report = AggregateReport(time_periods, formatter)
-        args.upload = False # No Twiki support for week ranges yet.
     else:
         report = DetailedReport(time_periods[0], formatter)
 
@@ -353,6 +358,6 @@ if __name__ == '__main__':
         uploader = TwikiUploader(url=args.upload,
                                  username=PHPReport.credential.username,
                                  password=PHPReport.credential.password)
-        uploader.upload(time_periods[0].wiki_string(), report.generate_report())
+        uploader.upload(report.wiki_string(), report.generate_report())
     else:
         print report.generate_report()
