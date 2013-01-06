@@ -85,7 +85,7 @@ class WeekOfWork(PeriodOfWork):
         super(WeekOfWork, self).__init__(start_date, 7, filter)
 
     def __str__(self):
-        return "week %i of %i" % (self.week, self.year)
+        return "Week %i of %i" % (self.week, self.year)
 
     def wiki_string(self):
         return "Week%i-%i" % (self.week, self.year)
