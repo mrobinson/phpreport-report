@@ -87,6 +87,9 @@ class WeekOfWork(PeriodOfWork):
     def __str__(self):
         return "Week %i of %i" % (self.week, self.year)
 
+    def short_string(self):
+        return "Week %i" % self.week
+
     def wiki_string(self):
         return "Week%i-%i" % (self.week, self.year)
 
@@ -140,7 +143,7 @@ class AggregateReport(object):
         for period in self.time_periods:
             amount = period.time_worked()
             total += amount
-            table_contents.append([str(period), format_delta(amount)])
+            table_contents.append([period.short_string(), format_delta(amount)])
         self.formatter.generate_table(table_contents, has_headers=False)
         self.formatter.generate_header("Total hours worked: %s" % format_delta(total))
         return self.formatter.flatten()
@@ -270,7 +273,16 @@ class TwikiUploader(object):
         self.username=username
         self.password=password
 
-    def upload(self, page_name, contents):
+    def add_links_for_short_strings(self, contents, time_periods):
+        for time_period in time_periods:
+            short_string = time_period.short_string()
+            contents = contents.replace(short_string,
+                                       "[[%s][%s]]" % (time_period.wiki_string(), short_string))
+        return contents
+
+    def upload(self, page_name, contents, time_periods):
+        contents = self.add_links_for_short_strings(contents, time_periods)
+
         full_save_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
         full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
         print "Uploading report to %s" % full_view_url
@@ -358,6 +370,6 @@ if __name__ == '__main__':
         uploader = TwikiUploader(url=args.upload,
                                  username=PHPReport.credential.username,
                                  password=PHPReport.credential.password)
-        uploader.upload(report.wiki_string(), report.generate_report())
+        uploader.upload(report.wiki_string(), report.generate_report(), time_periods)
     else:
         print report.generate_report()
