@@ -208,7 +208,7 @@ class DetailedReport(object):
         return self.formatter.flatten()
 
     def wiki_string(self):
-        return self.time_periods.wiki_string()
+        return self.time_period.wiki_string()
 
 class TextFormatter(object):
     def __init__(self):
@@ -269,7 +269,7 @@ class TwikiFormatter(TextFormatter):
 
     def generate_table(self, table, has_headers=True):
         if len(table) < 10 or has_headers:
-            return super(TwikiUploader, self).generate_table(self, table, has_headers)
+            return super(TwikiFormatter, self).generate_table(table, has_headers)
 
         def chunks_of_n(l, n):
             for i in xrange(0, len(l), n):
