@@ -125,26 +125,25 @@ def format_delta(delta):
     return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
 class AggregateReport(object):
-    def __init__(self, time_periods):
+    def __init__(self, time_periods, formatter):
         self.time_periods = time_periods
-        self.filter = filter
+        self.formatter = formatter
 
     def generate_report(self):
-        output = ""
-        output += "\n\n%s to %s for %s\n" % \
+        self.formatter.generate_header("%s to %s for %s" % \
             (self.time_periods[0],
-             self.time_periods[1],
-             self.time_periods[0].filter)
+             self.time_periods[-1],
+             self.time_periods[0].filter))
 
+        table_contents = []
         total = datetime.timedelta()
         for period in self.time_periods:
             amount = period.time_worked()
             total += amount
-            output += "%-20.20s  %-10.10s\n" % \
-                      (str(period), format_delta(amount))
-
-        output += "%-20.20s  %-10.10s\n" % ("Total:", format_delta(total))
-        return output
+            table_contents.append([str(period), format_delta(amount)])
+        self.formatter.generate_table(table_contents)
+        self.formatter.generate_header("Total hours worked: %s" % format_delta(total))
+        return self.formatter.flatten()
 
 class DetailedReport(object):
     def __init__(self, time_period, formatter):
@@ -232,6 +231,9 @@ class TextFormatter(object):
 
     def generate_section_header(self, header):
         self.pieces.append("\n%s\n" % header)
+
+    def generate_large_text(self, text):
+        self.pieces.append("%s\n")
 
     def flatten(self):
         return "".join(self.pieces)
@@ -342,7 +344,7 @@ if __name__ == '__main__':
         formatter = TextFormatter()
 
     if len(time_periods) > 1:
-        report = AggregateReport(time_periods)
+        report = AggregateReport(time_periods, formatter)
         args.upload = False # No Twiki support for week ranges yet.
     else:
         report = DetailedReport(time_periods[0], formatter)
