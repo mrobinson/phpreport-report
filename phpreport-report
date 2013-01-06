@@ -82,6 +82,12 @@ class WeekOfWork(PeriodOfWork):
 
         week_as_string = "%i %i 1" % (year, week)
         start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
+
+        # ISO8601 considers the first week of the year the first one that contains
+        # a Thursday, but strptime does not. We need to account for that.
+        if datetime.date(year, 1, 4).isoweekday() > 4:
+            start_date -= datetime.timedelta(days=7)
+
         super(WeekOfWork, self).__init__(start_date, 7, filter)
 
     def __str__(self):
