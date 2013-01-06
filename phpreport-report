@@ -130,7 +130,6 @@ class AggregateReport(object):
         self.filter = filter
 
     def generate_report(self):
-        self.report_pieces = []
         output = ""
         output += "\n\n%s to %s for %s\n" % \
             (self.time_periods[0],
@@ -148,31 +147,13 @@ class AggregateReport(object):
         return output
 
 class DetailedReport(object):
-    def __init__(self, time_period):
+    def __init__(self, time_period, formatter):
         self.time_period = time_period
+        self.formatter = formatter
 
     @staticmethod
     def format_date(date):
         return date.strftime("%d %b")
-
-    def generate_table_row(self, columns, header=False):
-        format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
-        self.report_pieces.append(format_string % tuple(columns))
-        self.report_pieces.append("\n")
-
-    def generate_table(self, table):
-        if not len(table):
-            return
-
-        self.generate_table_row(table[0], header=True)
-        for row in table[1:]:
-            self.generate_table_row(row)
-
-    def generate_report_header(self, header):
-        self.report_pieces.append("\n%s\n" % header)
-
-    def generate_section_header(self, header):
-        self.report_pieces.append("\n%s\n" % header)
 
     def time_worked(self, user=None, total=False):
         if total:
@@ -191,7 +172,7 @@ class DetailedReport(object):
                      self.time_worked() + \
                      self.time_worked(total=True))
 
-        self.generate_table(table)
+        self.formatter.generate_table(table)
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
@@ -201,53 +182,78 @@ class DetailedReport(object):
         return re.compile(r'\s+').sub(' ', all_stories).strip()
 
     def generate_stories_for_user(self, user):
-        self.generate_section_header("Stories for %s" % user.login)
+        self.formatter.generate_section_header("Stories for %s" % user.login)
 
         all_dates = self.time_period.get_all_dates()
-        for date in all_dates:
-            all_stories = self.get_stories_for_day_and_user(user, date)
-
-            indent = 11 * ' ' # Enough to account for the day name offset.
-            width = 80 - len(indent)
-            all_stories = textwrap.fill(all_stories,
-                                        break_long_words=False, # Don't break URLs.
-                                        width=width,
-                                        initial_indent=indent,
-                                        subsequent_indent=indent).strip()
-            self.report_pieces.append("%9.9s: %s\n" % (date.strftime("%A"), all_stories))
+        contents = [(date.strftime("%A"), self.get_stories_for_day_and_user(user, date)) for date in all_dates]
+        self.formatter.generate_aligned_list(contents)
 
     def generate_report(self):
-        self.report_pieces = []
-        self.generate_report_header("%s for %s" % (str(self.time_period), self.time_period.filter))
+        self.pieces = []
+        self.formatter.generate_header("%s for %s" % (str(self.time_period), self.time_period.filter))
         self.generate_hours()
-
         for user in self.time_period.users:
             self.generate_stories_for_user(user)
+        return self.formatter.flatten()
 
-        return "".join(self.report_pieces)
+class TextFormatter(object):
+    def __init__(self):
+        self.pieces = []
 
-class TwikiDetailedReport(DetailedReport):
+    def generate_table_row(self, columns, header=False):
+        format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
+        self.pieces.append(format_string % tuple(columns))
+        self.pieces.append("\n")
+
+    def generate_table(self, table):
+        if not len(table):
+            return
+
+        self.generate_table_row(table[0], header=True)
+        for row in table[1:]:
+            self.generate_table_row(row)
+
+    def generate_aligned_list(self, contents):
+        first_column_size = max([len(content[0]) for content in contents])
+        format_string = "%%%i.%is: %%s\n" % (first_column_size, first_column_size)
+
+        indent = (first_column_size + 2) * ' ' # Enough to account for the day name offset.
+        width = 80 - len(indent)
+        for content in contents:
+            second_column = textwrap.fill(content[1],
+                                          break_long_words=False, # Don't break URLs.
+                                          width=width,
+                                          initial_indent=indent,
+                                          subsequent_indent=indent).strip()
+            self.pieces.append(format_string % (content[0], second_column))
+
+    def generate_header(self, header):
+        self.pieces.append("\n%s\n" % header)
+
+    def generate_section_header(self, header):
+        self.pieces.append("\n%s\n" % header)
+
+    def flatten(self):
+        return "".join(self.pieces)
+
+class TwikiFormatter(TextFormatter):
     def generate_table_row(self, columns, header=False):
         if header:
             format_string = "| *%s* " + (len(columns) - 2) * "| *%s* " + "| *%s* |"
         else:
             format_string = "| *%s* " + (len(columns) - 2) * "| %s " + "| %s |"
-        self.report_pieces.append(format_string % tuple(columns))
-        self.report_pieces.append("\n")
+        self.pieces.append(format_string % tuple(columns))
+        self.pieces.append("\n")
 
-    def generate_report_header(self, header):
-        self.report_pieces.append("\n---++%s\n" % header)
+    def generate_header(self, header):
+        self.pieces.append("\n---++%s\n" % header)
 
     def generate_section_header(self, header):
-        self.report_pieces.append("\n---++++%s\n" % header)
+        self.pieces.append("\n---++++%s\n" % header)
 
-    def generate_stories_for_user(self, user):
-        self.generate_section_header("Stories for %s" % user.login)
-
-        all_dates = self.time_period.get_all_dates()
-        for date in all_dates:
-            all_stories = self.get_stories_for_day_and_user(user, date)
-            self.report_pieces.append("   * *%s* - %s\n" % (date.strftime("%A"), all_stories))
+    def generate_aligned_list(self, contents):
+        for content in contents:
+            self.pieces.append("   * *%s* - %s\n" % (content[0], content[1]))
 
 class TwikiUploader(object):
     def __init__(self, url, section="Main", username=None, password=None):
@@ -330,14 +336,16 @@ if __name__ == '__main__':
     task_filter = TaskFilter(project=project, customer=customer, user=user)
     time_periods = WeekOfWork.create_from_string(args.week, task_filter)
 
+    if args.twiki or args.upload:
+        formatter = TwikiFormatter()
+    else:
+        formatter = TextFormatter()
+
     if len(time_periods) > 1:
         report = AggregateReport(time_periods)
         args.upload = False # No Twiki support for week ranges yet.
     else:
-        report_class = DetailedReport
-        if args.twiki or args.upload:
-            report_class = TwikiDetailedReport
-        report = report_class(time_periods[0])
+        report = DetailedReport(time_periods[0], formatter)
 
     if args.upload:
         uploader = TwikiUploader(url=args.upload,
