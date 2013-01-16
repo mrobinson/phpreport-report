@@ -257,7 +257,7 @@ class TextFormatter(object):
         self.pieces.append("\n%s\n" % header)
 
     def generate_large_text(self, text):
-        self.pieces.append("%s\n")
+        self.pieces.append("%s\n" % text)
 
     def flatten(self):
         return "".join(self.pieces)
