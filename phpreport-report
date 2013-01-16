@@ -214,18 +214,27 @@ class TextFormatter(object):
     def __init__(self):
         self.pieces = []
 
-    def generate_table_row(self, columns, header=False):
-        format_string = "%10.10s   " + (len(columns) - 1) * '%-6.6s '
+    def generate_table_row(self, columns, lengths, header=False):
+        format_string = ""
+        for length in lengths:
+            format_string += "%%-%i.%is  " % (length, length)
         self.pieces.append(format_string % tuple(columns))
         self.pieces.append("\n")
+
+    @staticmethod
+    def generate_column_length_list(table):
+        lengths = map(lambda x: map(len, x), table) # Generate a table of lengths.
+        # Turn the table of lengths into a row of max lengths for each column.
+        return map(max, zip(*lengths))
 
     def generate_table(self, table, has_headers=True):
         if not len(table):
             return
 
-        self.generate_table_row(table[0], header=has_headers)
+        lengths = TextFormatter.generate_column_length_list(table)
+        self.generate_table_row(table[0], lengths, header=has_headers)
         for row in table[1:]:
-            self.generate_table_row(row)
+            self.generate_table_row(row, lengths)
 
     def generate_aligned_list(self, contents):
         first_column_size = max([len(content[0]) for content in contents])
