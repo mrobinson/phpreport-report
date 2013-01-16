@@ -31,7 +31,7 @@ import sys
 import urllib2 as request
 import xml.etree.ElementTree as ElementTree
 
-DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
+DEFAULT_PHPREPORT_ADDRESS = "https://beta.phpreport.igalia.com/web/services"
 httplib.HTTPConnection.debuglevel = 1
 
 class Credential(object):
@@ -94,6 +94,8 @@ class Task(PHPReportObject):
         # These might be empty.
         self.project_id = None
         self.project = None
+        self.onsite = False
+        self.telework = False
 
         for child in task_xml.getchildren():
             if child.tag == "id":
@@ -108,8 +110,6 @@ class Task(PHPReportObject):
                 self.end_time = datetime.datetime.strptime(child.text, "%H:%M")
             elif child.tag == "story" and child.text != None:
                 self.story = child.text
-            elif child.tag == "telework":
-                self.telework = child.text
             elif child.tag == "text" and child.text != None:
                 self.text = child.text
             elif child.tag == "phase":
@@ -124,6 +124,10 @@ class Task(PHPReportObject):
                 self.customer_id = int(child.text)
             elif child.tag == "taskStoryId":
                 self.task_story_id = child.text
+            elif child.tag == "telework" and child.text == "true":
+                self.telework = True
+            elif child.tag == "onsite" and child.text == "true":
+                self.onsite = True
 
     def length(self):
         return self.end_time - self.init_time

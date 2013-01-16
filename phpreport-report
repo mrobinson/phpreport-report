@@ -54,7 +54,7 @@ class PeriodOfWork(object):
         for task in self.tasks:
             self.users.add(task.user)
 
-    def filter_tasks(self, date=None, day_offset=None, user=None):
+    def filter_tasks(self, date=None, day_offset=None, user=None, only_onsite=False):
         if date == None and day_offset != None:
             date = self.get_date_for_day_offset(day_offset)
 
@@ -62,6 +62,8 @@ class PeriodOfWork(object):
             if user != None and task.user != user:
                 return False
             if date != None and task.date != date:
+                return False
+            if only_onsite and not(task.onsite):
                 return False
             return True
         return filter(filter_task, self.tasks)
@@ -72,8 +74,8 @@ class PeriodOfWork(object):
     def get_date_for_day_offset(self, day_offset):
         return self.start_date + datetime.timedelta(day_offset)
 
-    def time_worked(self, date=None, day_offset=None, user=None):
-        return sum([task.length() for task in self.filter_tasks(date, day_offset, user)], datetime.timedelta())
+    def time_worked(self, date=None, day_offset=None, user=None, only_onsite=False):
+        return sum([task.length() for task in self.filter_tasks(date, day_offset, user, only_onsite)], datetime.timedelta())
 
 class WeekOfWork(PeriodOfWork):
     def __init__(self, week, year, filter=filter):
@@ -146,12 +148,17 @@ class AggregateReport(object):
 
         table_contents = []
         total = datetime.timedelta()
+        total_onsite = datetime.timedelta()
         for period in self.time_periods:
             amount = period.time_worked()
+            amount_onsite = period.time_worked(only_onsite=True)
             total += amount
-            table_contents.append([period.short_string(), format_delta(amount)])
+            total_onsite += amount_onsite
+            table_contents.append([period.short_string(), "%s (%s)" % (format_delta(amount), format_delta(amount_onsite))])
         self.formatter.generate_table(table_contents, has_headers=False)
+
         self.formatter.generate_header("Total hours worked: %s" % format_delta(total))
+        self.formatter.generate_header("Total onsite hours worked: %s" % format_delta(total_onsite))
         return self.formatter.flatten()
 
     def wiki_string(self):
@@ -182,8 +189,12 @@ class DetailedReport(object):
         table.append(["everyone"] + \
                      self.time_worked() + \
                      self.time_worked(total=True))
-
         self.formatter.generate_table(table)
+
+        self.formatter.generate_large_text("Total hours worked: %s" %  table[-1][-1])
+        onsite_time = self.time_period.time_worked(only_onsite=True)
+        if onsite_time > datetime.timedelta(0):
+            self.formatter.generate_large_text("Onsite hours worked: %s" % format_delta(onsite_time))
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
