@@ -32,6 +32,7 @@ import urllib2 as request
 import xml.etree.ElementTree as ElementTree
 
 DEFAULT_PHPREPORT_ADDRESS = "https://beta.phpreport.igalia.com/web/services"
+URLS_TO_FETCH_IN_PARALLEL = 10
 httplib.HTTPConnection.debuglevel = 1
 
 class Credential(object):
@@ -187,6 +188,10 @@ class Customer(PHPReportObject):
 def get_url_contents(url):
     return PHPReport.get_contents_of_url(url)
 
+def fetch_urls_in_parallel(urls):
+    pool = multiprocessing.Pool(processes=URLS_TO_FETCH_IN_PARALLEL)
+    return pool.map(get_url_contents, urls)
+
 class PHPReport(object):
     users = {}
     projects = {}
@@ -233,15 +238,14 @@ class PHPReport(object):
 
         # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
         print "Loading PHPReport data..."
-        pool = multiprocessing.Pool(processes=3)
-        data = pool.map(get_url_contents, [
+        responses = fetch_urls_in_parallel([
             "%s/getCustomerProjectsService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getAllUsersService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getUserCustomersService.php?sid=%s" % (cls.address, PHPReport.session_id),
         ])
-        Project.load_all(data[0], "project")
-        User.load_all(data[1], "user")
-        Customer.load_all(data[2], "customer")
+        Project.load_all(responses[0], "project")
+        User.load_all(responses[1], "user")
+        Customer.load_all(responses[2], "customer")
 
     @staticmethod
     def create_objects_from_response(response, cls, tag):
@@ -250,9 +254,8 @@ class PHPReport(object):
     @classmethod
     def get_tasks_for_task_filters(cls, task_filters):
         print "Fetching tasks..."
-        pool = multiprocessing.Pool(processes=10)
-        data = pool.map(get_url_contents, map(lambda x: x.to_url(cls), task_filters))
-        return map(lambda x: cls.create_objects_from_response(x, Task, "task"), data)
+        responses = fetch_urls_in_parallel([task_filter.to_url(cls) for task_filter in task_filters])
+        return map(lambda x: cls.create_objects_from_response(x, Task, "task"), responses)
 
     @classmethod
     def get_tasks_for_day_and_user(cls, date, user):
