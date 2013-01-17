@@ -377,8 +377,8 @@ if __name__ == '__main__':
                         help="week or week range of tasks to show")
     parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
                         default="text", help="output format for report")
-    parser.add_argument('--upload', type=str,
-                        help="twiki base URL to upload to")
+    parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
+                        help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
@@ -426,22 +426,27 @@ if __name__ == '__main__':
     task_filter = TaskFilter(project=project, customer=customer, user=user)
     time_periods = WeekOfWork.create_from_string(args.week, task_filter)
 
-    if args.upload:
+    if args.twiki:
         args.formatter = "twiki"
     if args.formatter == "twiki":
         formatter = TwikiFormatter()
     else:
         formatter = TextFormatter()
 
+    reports = []
     if len(time_periods) > 1:
-        report = AggregateReport(time_periods, formatter)
-    else:
-        report = DetailedReport(time_periods[0], formatter)
+        reports.append(AggregateReport(time_periods, formatter))
+    if len(time_periods) == 1 or args.twiki:
+        for period in time_periods:
+            reports.append(DetailedReport(period, formatter))
 
-    if args.upload:
-        uploader = TwikiUploader(url=args.upload,
-                                 username=PHPReport.credential.username,
-                                 password=PHPReport.credential.password)
-        uploader.upload(report.wiki_string(), report.generate_report(), time_periods)
-    else:
+    if args.twiki:
+        for report in reports:
+            uploader = TwikiUploader(url=args.twiki,
+                                     username=PHPReport.credential.username,
+                                     password=PHPReport.credential.password)
+            uploader.upload(report.wiki_string(), report.generate_report(), time_periods)
+        sys.exit(0)
+
+    for report in reports:
         print report.generate_report()
