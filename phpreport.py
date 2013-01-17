@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Igalia S.L.
+# Copyright (C) 2012, 2013 Igalia S.L.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -248,17 +248,11 @@ class PHPReport(object):
         return [cls(child) for child in ElementTree.fromstring(response).getchildren() if child.tag == tag]
 
     @classmethod
-    def get_tasks_in_range(cls, start_date, end_date, filter=filter):
-        tasks = []
-        url = "%s/getTasksFiltered.php?sid=%s&filterStartDate=%s&filterEndDate=%s&dateFormat=Y-m-d" % \
-              (cls.address, cls.session_id, str(start_date), str(end_date))
-        if filter.project != None:
-            url += "&projectId=%i" % filter.project.id
-        if filter.customer != None:
-            url += "&customerId=%i" % filter.customer.id
-        if filter.user != None:
-            url += "&userId=%i" % filter.user.id
-        return cls.create_objects_from_response(cls.get_contents_of_url(url), Task, "task")
+    def get_tasks_for_task_filters(cls, task_filters):
+        print "Fetching tasks..."
+        pool = multiprocessing.Pool(processes=10)
+        data = pool.map(get_url_contents, map(lambda x: x.to_url(cls), task_filters))
+        return map(lambda x: cls.create_objects_from_response(x, Task, "task"), data)
 
     @classmethod
     def get_tasks_for_day_and_user(cls, date, user):
@@ -272,6 +266,8 @@ class TaskFilter(object):
         self.project = project
         self.customer = customer
         self.user = user
+        self.start_date = None
+        self.end_date = None
 
     def __str__(self):
         if self.project:
@@ -279,3 +275,24 @@ class TaskFilter(object):
         if self.customer:
             return self.customer.name
         return self.user.login
+
+    def create_instance_for_dates(self, start_date, end_date):
+        task_filter = TaskFilter(project=self.project,
+                                 customer=self.customer,
+                                 user=self.user)
+        task_filter.start_date = start_date
+        task_filter.end_date = end_date
+        return task_filter
+
+class TaskFilter(TaskFilter):
+    def to_url(self, phpreport):
+        url = "%s/getTasksFiltered.php?sid=%s&filterStartDate=%s&filterEndDate=%s&dateFormat=Y-m-d" % \
+              (phpreport.address, phpreport.session_id, str(self.start_date), str(self.end_date))
+        if self.project != None:
+            url += "&projectId=%i" % self.project.id
+        if self.customer != None:
+            url += "&customerId=%i" % self.customer.id
+        if self.user != None:
+            url += "&userId=%i" % self.user.id
+        return url
+

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2012 Igalia S.L.
+# Copyright (C) 2012, 2013 Igalia S.L.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -40,21 +40,26 @@ import urllib
 import urllib2
 
 class PeriodOfWork(object):
-    def __init__(self, start_date, num_days, filter=filter):
+    def __init__(self, start_date, num_days, filter=TaskFilter()):
         self.start_date = start_date
         self.num_days = num_days
-        self.filter = filter
-
         self.users = set()
+        self.tasks = None
+        self.filter = filter.create_instance_for_dates(
+            self.get_date_for_day_offset(0),
+            self.get_date_for_day_offset(num_days - 1))
 
-        print "Fetching report for %s" % str(self)
-        self.tasks = PHPReport.get_tasks_in_range(self.get_date_for_day_offset(0),
-                                                  self.get_date_for_day_offset(num_days - 1),
-                                                  filter=filter)
+    def get_tasks_if_necessary(self):
+        if self.tasks == None:
+            PeriodOfWork.fetch_tasks_for_all([self])
+
+    def set_tasks(self, tasks):
+        self.tasks = tasks
         for task in self.tasks:
             self.users.add(task.user)
 
     def filter_tasks(self, date=None, day_offset=None, user=None, only_onsite=False):
+        self.get_tasks_if_necessary()
         if date == None and day_offset != None:
             date = self.get_date_for_day_offset(day_offset)
 
@@ -77,8 +82,14 @@ class PeriodOfWork(object):
     def time_worked(self, date=None, day_offset=None, user=None, only_onsite=False):
         return sum([task.length() for task in self.filter_tasks(date, day_offset, user, only_onsite)], datetime.timedelta())
 
+    @staticmethod
+    def fetch_tasks_for_all(periods):
+        tasks = PHPReport.get_tasks_for_task_filters([period.filter for period in periods])
+        for pair in zip(periods, tasks):
+            pair[0].set_tasks(pair[1])
+
 class WeekOfWork(PeriodOfWork):
-    def __init__(self, week, year, filter=filter):
+    def __init__(self, week, year, filter=TaskFilter()):
         self.week = week
         self.year = year
 
@@ -129,6 +140,8 @@ class WeekOfWork(PeriodOfWork):
 
             for week in range(start[1], end[1] + 1):
                 result.append(cls(week, start[0], filter))
+
+        cls.fetch_tasks_for_all(result)
         return result
 
 
