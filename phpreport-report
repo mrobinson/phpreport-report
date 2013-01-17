@@ -204,7 +204,6 @@ class DetailedReport(object):
                      self.time_worked(total=True))
         self.formatter.generate_table(table)
 
-        self.formatter.generate_large_text("Total hours worked: %s" %  table[-1][-1])
         onsite_time = self.time_period.time_worked(only_onsite=True)
         if onsite_time > datetime.timedelta(0):
             self.formatter.generate_large_text("Onsite hours worked: %s" % format_delta(onsite_time))
