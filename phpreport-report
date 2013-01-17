@@ -32,6 +32,7 @@ from phpreport import TaskFilter
 import argparse
 import base64
 import datetime
+import multiprocessing
 import re
 import textwrap
 import sys
@@ -327,6 +328,13 @@ class TwikiFormatter(TextFormatter):
         for content in contents:
             self.pieces.append("   * *%s* - %s\n" % (content[0], content[1]))
 
+def send_url_request(request):
+    try:
+        urllib2.urlopen(request)
+    except Exception as e:
+        print e
+        print "Could not complete upload to TWiki at %s" % request.get_full_url()
+
 class TwikiUploader(object):
     def __init__(self, url, section="Main", username=None, password=None):
         self.url = url
@@ -341,8 +349,14 @@ class TwikiUploader(object):
                                         "[[%s][%s]] " % (time_period.wiki_string(), short_string))
         return contents
 
-    def upload(self, page_name, contents, time_periods):
-        contents = self.add_links_for_short_strings(contents, time_periods)
+    def upload(self, reports, time_periods):
+        requests = [self.prepare_report(report, time_periods) for report in reports]
+        pool = multiprocessing.Pool(processes=10)
+        return pool.map(send_url_request, requests)
+
+    def prepare_report(self, report, time_periods):
+        page_name = report.wiki_string()
+        contents = self.add_links_for_short_strings(report.generate_report(), time_periods)
 
         full_save_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
         full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
@@ -356,16 +370,12 @@ class TwikiUploader(object):
                                'Basic ' + \
                                base64.urlsafe_b64encode("%s:%s" % (self.username,
                                                                    self.password)))
-        try:
-            urllib2.urlopen(request)
-        except Exception as e:
-            print e
-            print "Could not complete upload to twiki at %s" % full_save_url
+        return request
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--login', type=str,
-                        help="login name for PHPReport and twiki")
+                        help="login name for PHPReport and TWiki")
     parser.add_argument('-p', '--project', type=str,
                         help="only consider tasks matching given project search string")
     parser.add_argument('-c', '--customer', type=str,
@@ -441,11 +451,10 @@ if __name__ == '__main__':
             reports.append(DetailedReport(period, formatter))
 
     if args.twiki:
-        for report in reports:
-            uploader = TwikiUploader(url=args.twiki,
-                                     username=PHPReport.credential.username,
-                                     password=PHPReport.credential.password)
-            uploader.upload(report.wiki_string(), report.generate_report(), time_periods)
+        uploader = TwikiUploader(url=args.twiki,
+                                 username=PHPReport.credential.username,
+                                 password=PHPReport.credential.password)
+        uploader.upload(reports, time_periods)
         sys.exit(0)
 
     for report in reports:
