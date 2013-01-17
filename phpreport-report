@@ -365,14 +365,21 @@ class TwikiUploader(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--login', type=str)
-    parser.add_argument('-p', '--project', type=str)
-    parser.add_argument('-c', '--customer', type=str)
-    parser.add_argument('-u', '--user', type=str)
+    parser.add_argument('-l', '--login', type=str,
+                        help="login name for PHPReport and twiki")
+    parser.add_argument('-p', '--project', type=str,
+                        help="only consider tasks matching given project search string")
+    parser.add_argument('-c', '--customer', type=str,
+                        help="only consider tasks matching given customer search string")
+    parser.add_argument('-u', '--user', type=str,
+                        help="only consider tasks logged by the given user")
     parser.add_argument('-w', '--week', type=str,
-                        default = str(datetime.datetime.today().isocalendar()[1]))
-    parser.add_argument('-t', '--twiki', action="store_true")
-    parser.add_argument('--upload', type=str)
+                        default = str(datetime.datetime.today().isocalendar()[1]),
+                        help="week or week range of tasks to show")
+    parser.add_argument('-t', '--twiki', action="store_true",
+                        help="output report in twiki syntax")
+    parser.add_argument('--upload', type=str,
+                        help="twiki base URL to upload to")
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
@@ -393,6 +400,8 @@ if __name__ == '__main__':
             return True
         return filter(matches_all, instances)
 
+    # FIXME: We should really support choosing selecting more than one
+    # customer or project.
     if args.project != None:
         projects = filter_instances(Project.instances.values(), args.project)
         if not len(projects):
