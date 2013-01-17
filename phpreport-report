@@ -375,8 +375,8 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--week', type=str,
                         default = str(datetime.datetime.today().isocalendar()[1]),
                         help="week or week range of tasks to show")
-    parser.add_argument('-t', '--twiki', action="store_true",
-                        help="output report in twiki syntax")
+    parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
+                        default="text", help="output format for report")
     parser.add_argument('--upload', type=str,
                         help="twiki base URL to upload to")
     args = parser.parse_args()
@@ -426,7 +426,9 @@ if __name__ == '__main__':
     task_filter = TaskFilter(project=project, customer=customer, user=user)
     time_periods = WeekOfWork.create_from_string(args.week, task_filter)
 
-    if args.twiki or args.upload:
+    if args.upload:
+        args.formatter = "twiki"
+    if args.formatter == "twiki":
         formatter = TwikiFormatter()
     else:
         formatter = TextFormatter()
