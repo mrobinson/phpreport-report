@@ -287,15 +287,15 @@ class TextFormatter(object):
         return "".join(self.pieces)
 
 class TwikiFormatter(TextFormatter):
-    def generate_table_row(self, columns, header=False, highlight_first=True):
+    def generate_table_row(self, columns, lengths=None, header=False, highlight_first=True):
         first = "| *%s* "
         if not highlight_first:
             first = "| %s"
 
         if header:
-            format_string = first + (len(columns) - 2) * "| *%s* " + "| *%s* |"
+            format_string = first + (len(columns) - 2) * " | *%s*" + " | *%s* |"
         else:
-            format_string = first + (len(columns) - 2) * "| %s " + "| %s |"
+            format_string = first + (len(columns) - 2) * " | %s" + " | %s |"
 
         self.pieces.append(format_string % tuple(columns))
         self.pieces.append("\n")
@@ -338,8 +338,8 @@ class TwikiUploader(object):
     def add_links_for_short_strings(self, contents, time_periods):
         for time_period in time_periods:
             short_string = time_period.short_string()
-            contents = contents.replace(short_string,
-                                       "[[%s][%s]]" % (time_period.wiki_string(), short_string))
+            contents = contents.replace(" %s " % short_string,
+                                        " [[%s][%s]] " % (time_period.wiki_string(), short_string))
         return contents
 
     def upload(self, page_name, contents, time_periods):
