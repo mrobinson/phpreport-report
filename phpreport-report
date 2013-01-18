@@ -50,6 +50,10 @@ class PeriodOfWork(object):
             self.get_date_for_day_offset(0),
             self.get_date_for_day_offset(num_days - 1))
 
+    def get_users(self):
+        self.get_tasks_if_necessary()
+        return self.users
+
     def get_tasks_if_necessary(self):
         if self.tasks == None:
             PeriodOfWork.fetch_tasks_for_all([self])
@@ -196,7 +200,7 @@ class DetailedReport(object):
     def generate_hours(self):
         table = []
         table.append([""] + map(DetailedReport.format_date, self.time_period.get_all_dates()) + ["Total"])
-        for user in self.time_period.users:
+        for user in self.time_period.get_users():
             table.append([user.login] + \
                          self.time_worked(user=user) + \
                          self.time_worked(user=user, total=True))
