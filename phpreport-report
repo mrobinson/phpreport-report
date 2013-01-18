@@ -439,16 +439,16 @@ if __name__ == '__main__':
     if args.twiki:
         args.formatter = "twiki"
     if args.formatter == "twiki":
-        formatter = TwikiFormatter()
+        formatter_class = TwikiFormatter
     else:
-        formatter = TextFormatter()
+        formatter_class = TextFormatter
 
     reports = []
     if len(time_periods) > 1:
-        reports.append(AggregateReport(time_periods, formatter))
+        reports.append(AggregateReport(time_periods, formatter_class()))
     if len(time_periods) == 1 or args.twiki:
         for period in time_periods:
-            reports.append(DetailedReport(period, formatter))
+            reports.append(DetailedReport(period, formatter_class()))
 
     if args.twiki:
         uploader = TwikiUploader(url=args.twiki,
