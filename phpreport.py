@@ -109,6 +109,13 @@ class Task(PHPReportObject):
                 self.init_time = datetime.datetime.strptime(child.text, "%H:%M")
             elif child.tag == "endTime":
                 self.end_time = datetime.datetime.strptime(child.text, "%H:%M")
+
+                # There's a bug in PHPReport where 0:00 can be considered 24:00 when it's
+                # used as the end time. Work around that now:
+                # https://trac.phpreport.igalia.com/ticket/193
+                if self.end_time.hour == 0 and self.end_time.minute == 0:
+                    self.end_time += datetime.timedelta(hours=24)
+
             elif child.tag == "story" and child.text != None:
                 self.story = child.text
             elif child.tag == "text" and child.text != None:
