@@ -367,7 +367,7 @@ class TwikiUploader(object):
         print "Uploading report to %s" % full_view_url
 
         request = urllib2.Request(full_save_url)
-        request.add_data(urllib.urlencode({'text': contents}))
+        request.add_data(urllib.urlencode({'text': contents.encode('latin1')}))
 
         if self.username and self.password:
             request.add_header('Authorization',
