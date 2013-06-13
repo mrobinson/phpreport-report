@@ -154,9 +154,10 @@ def format_delta(delta):
     return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
 
 class AggregateReport(object):
-    def __init__(self, time_periods, formatter):
+    def __init__(self, time_periods, formatter, repot_name):
         self.time_periods = time_periods
         self.formatter = formatter
+        self.report_name = repot_name
 
     def generate_report(self):
         self.formatter.generate_header("%s to %s for %s" % \
@@ -180,6 +181,8 @@ class AggregateReport(object):
         return self.formatter.flatten()
 
     def wiki_string(self):
+        if self.report_name != None:
+            return self.report_name
         return "%sTo%s" % (self.time_periods[0].wiki_string(), self.time_periods[-1].wiki_string())
 
 class DetailedReport(object):
@@ -394,6 +397,8 @@ if __name__ == '__main__':
                         default="text", help="output format for report")
     parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
                         help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
+    parser.add_argument('-n', '--name', type=str,
+                        default=None, help="In TWiki mode use it to set the name of the TWiki page for the report.")
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
@@ -450,7 +455,7 @@ if __name__ == '__main__':
 
     reports = []
     if len(time_periods) > 1:
-        reports.append(AggregateReport(time_periods, formatter_class()))
+        reports.append(AggregateReport(time_periods, formatter_class(), args.name))
     if len(time_periods) == 1 or args.twiki:
         for period in time_periods:
             reports.append(DetailedReport(period, formatter_class()))
