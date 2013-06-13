@@ -349,8 +349,9 @@ class TwikiUploader(object):
     def add_links_for_short_strings(self, contents, time_periods):
         for time_period in time_periods:
             short_string = time_period.short_string()
-            contents = contents.replace("%s " % short_string,
-                                        "[[%s][%s]] " % (time_period.wiki_string(), short_string))
+            contents = re.sub("%s([^a-zA-Z0-9])" % short_string,
+                              "[[%s][%s]]\g<1>" % (time_period.wiki_string(), short_string),
+                              contents)
         return contents
 
     def upload(self, reports, time_periods):
