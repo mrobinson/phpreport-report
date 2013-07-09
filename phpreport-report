@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Copyright (C) 2012, 2013 Igalia S.L.
 #
@@ -37,8 +37,8 @@ import re
 import textwrap
 import sys
 import time
-import urllib
-import urllib2
+import urllib.request, urllib.parse, urllib.error
+import urllib.request, urllib.error, urllib.parse
 
 class PeriodOfWork(object):
     def __init__(self, start_date, num_days, filter=TaskFilter()):
@@ -76,10 +76,10 @@ class PeriodOfWork(object):
             if only_onsite and not(task.onsite):
                 return False
             return True
-        return filter(filter_task, self.tasks)
+        return list(filter(filter_task, self.tasks))
 
     def get_all_dates(self):
-        return [self.start_date + datetime.timedelta(offset) for offset in xrange(0, self.num_days)]
+        return [self.start_date + datetime.timedelta(offset) for offset in range(0, self.num_days)]
 
     def get_date_for_day_offset(self, day_offset):
         return self.start_date + datetime.timedelta(day_offset)
@@ -199,7 +199,7 @@ class DetailedReport(object):
 
     def generate_hours(self):
         table = []
-        table.append([""] + map(DetailedReport.format_date, self.time_period.get_all_dates()) + ["Total"])
+        table.append([""] + list(map(DetailedReport.format_date, self.time_period.get_all_dates())) + ["Total"])
         for user in self.time_period.get_users():
             table.append([user.login] + \
                          self.time_worked(user=user) + \
@@ -251,9 +251,9 @@ class TextFormatter(object):
 
     @staticmethod
     def generate_column_length_list(table):
-        lengths = map(lambda x: map(len, x), table) # Generate a table of lengths.
+        lengths = [list(map(len, x)) for x in table] # Generate a table of lengths.
         # Turn the table of lengths into a row of max lengths for each column.
-        return map(max, zip(*lengths))
+        return list(map(max, list(zip(*lengths))))
 
     def generate_table(self, table, has_headers=True):
         if not len(table):
@@ -309,11 +309,11 @@ class TwikiFormatter(TextFormatter):
             return super(TwikiFormatter, self).generate_table(table, has_headers)
 
         def chunks_of_n(l, n):
-            for i in xrange(0, len(l), n):
+            for i in range(0, len(l), n):
                 yield l[i:i+n]
 
         def transpose_to_columns(lists):
-            return map(lambda *row: [elem or ['', ''] for elem in row], *lists)
+            return list(map(lambda *row: [elem or ['', ''] for elem in row], *lists))
 
         table = chunks_of_n(table, 10)
         table = transpose_to_columns(table)
@@ -334,10 +334,10 @@ class TwikiFormatter(TextFormatter):
 
 def send_url_request(request):
     try:
-        urllib2.urlopen(request)
+        urllib.request.urlopen(request)
     except Exception as e:
-        print e
-        print "Could not complete upload to TWiki at %s" % request.get_full_url()
+        print(e)
+        print("Could not complete upload to TWiki at %s" % request.get_full_url())
 
 class TwikiUploader(object):
     def __init__(self, url, section="Main", username=None, password=None):
@@ -365,10 +365,10 @@ class TwikiUploader(object):
 
         full_save_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
         full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
-        print "Uploading report to %s" % full_view_url
+        print("Uploading report to %s" % full_view_url)
 
-        request = urllib2.Request(full_save_url)
-        request.add_data(urllib.urlencode({'text': contents.encode('latin1')}))
+        request = urllib.request.Request(full_save_url)
+        request.add_data(urllib.parse.urlencode({'text': contents.encode('latin1')}))
 
         if self.username and self.password:
             request.add_header('Authorization',
@@ -397,7 +397,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
-        print "Must give either a customer (-c) search string or a product search string (-p)"
+        print("Must give either a customer (-c) search string or a product search string (-p)")
         sys.exit(1)
 
     PHPReport.login(username=args.login)
@@ -412,29 +412,29 @@ if __name__ == '__main__':
                 if not instance.match(term):
                     return False
             return True
-        return filter(matches_all, instances)
+        return list(filter(matches_all, instances))
 
     # FIXME: We should really support choosing selecting more than one
     # customer or project.
     if args.project != None:
-        projects = filter_instances(Project.instances.values(), args.project)
+        projects = filter_instances(list(Project.instances.values()), args.project)
         if not len(projects):
-            print "Could not find any projects matching '%s'" % args.project
+            print("Could not find any projects matching '%s'" % args.project)
             sys.exit(1)
         projects.sort()
         project = projects[-1]
 
     if args.customer != None:
-        customers = filter_instances(Customer.instances.values(), args.customer)
+        customers = filter_instances(list(Customer.instances.values()), args.customer)
         if not len(customers):
-            print "Could not find any customers matching '%s'" % args.customer
+            print("Could not find any customers matching '%s'" % args.customer)
             sys.exit(1)
         customer = customers[0]
 
     if args.user != None:
-        users = [user for user in User.instances.values() if user.login == args.user]
+        users = [user for user in list(User.instances.values()) if user.login == args.user]
         if not len(users):
-            print "Could not find any customers matching '%s'" % args.customer
+            print("Could not find any customers matching '%s'" % args.customer)
             sys.exit(1)
         user = users[0]
 
@@ -463,4 +463,4 @@ if __name__ == '__main__':
         sys.exit(0)
 
     for report in reports:
-        print report.generate_report()
+        print(report.generate_report())

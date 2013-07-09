@@ -24,16 +24,16 @@
 import base64
 import datetime
 import getpass
-import httplib
+import http.client
 import keyring
 import multiprocessing
 import sys
-import urllib2 as request
+import urllib
 import xml.etree.ElementTree as ElementTree
 
 DEFAULT_PHPREPORT_ADDRESS = "https://beta.phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
-httplib.HTTPConnection.debuglevel = 1
+http.client.HTTPConnection.debuglevel = 0
 
 class Credential(object):
     all_credentials = {}
@@ -41,7 +41,7 @@ class Credential(object):
     @classmethod
     def for_url(cls, url, username=None):
         if not username:
-            username = raw_input("Username: ")
+            username = input("Username: ")
 
         key = (url, username)
         if key in cls.all_credentials:
@@ -66,7 +66,7 @@ class Credential(object):
     def save(self):
         if self.saved:
             return
-        if raw_input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
+        if input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
             return
         keyring.set_password("PHPReport", self.username, self.password)
 
@@ -161,14 +161,14 @@ class Project(PHPReportObject):
     def has_ended(self):
         return self.end_date and self.end_date() < datetime.date.today()
 
-    def choose_best(self, other):
+    def __lt__(self, other):
         if self.has_ended() and not other.has_ended():
-            return -1
+            return True
         if other.has_ended() and not self.has_ended():
-            return 1
+            return False
         if self.init_date and other.init_date:
-            return cmp(self.init_date, other.init_date)
-        return cmp(self.id, other.id)
+            return self.init_date <  other.init_date
+        return self.id < other.id
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
@@ -205,20 +205,15 @@ class PHPReport(object):
     customers = {}
 
     @classmethod
-    def make_request(cls, url):
-        auth_header = 'Basic ' + base64.encodestring(cls.credential.username + ':' + cls.credential.password).strip()
-        return request.Request(url, None, {"Authorization" : auth_header})
-
-    @classmethod
     def get_contents_of_url(cls, url):
         def sanitize_url_for_display(url):
             return url.replace(cls.credential.password, "<<<your password>>>")
 
-        r = cls.make_request(url)
+        r = urllib.request.Request(url, None)
         try:
-            return request.urlopen(r).read()
+            return urllib.request.urlopen(r).read()
         except Exception as e:
-            print "Could not complete request to %s" % sanitize_url_for_display(url)
+            print("Could not complete request to %s" % sanitize_url_for_display(url))
             sys.exit(1)
 
     @classmethod
@@ -227,7 +222,12 @@ class PHPReport(object):
         cls.projects = {}
         cls.credential = Credential.for_url(address, username)
 
-        print "Logging in..."
+        password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        password_manager.add_password(None, cls.address, cls.credential.username, cls.credential.password)
+        handler = urllib.request.HTTPBasicAuthHandler(password_manager)
+        urllib.request.install_opener(urllib.request.build_opener(handler))
+
+        print("Logging in...")
         response = cls.get_contents_of_url("%s/loginService.php?login=%s&password=%s" %
                                             (cls.address, cls.credential.username, cls.credential.password))
 
@@ -238,13 +238,13 @@ class PHPReport(object):
                 cls.session_id = child.text
 
         if not(cls.session_id):
-            print "Could not find session id in login response, password likely incorrect: %s" % response
+            print("Could not find session id in login response, password likely incorrect: %s" % response)
             sys.exit(1)
 
         cls.credential.save()
 
         # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
-        print "Loading PHPReport data..."
+        print("Loading PHPReport data...")
         responses = fetch_urls_in_parallel([
             "%s/getCustomerProjectsService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getAllUsersService.php?sid=%s" % (cls.address, PHPReport.session_id),
@@ -260,9 +260,9 @@ class PHPReport(object):
 
     @classmethod
     def get_tasks_for_task_filters(cls, task_filters):
-        print "Fetching tasks..."
+        print("Fetching tasks...")
         responses = fetch_urls_in_parallel([task_filter.to_url(cls) for task_filter in task_filters])
-        return map(lambda x: cls.create_objects_from_response(x, Task, "task"), responses)
+        return [cls.create_objects_from_response(x, Task, "task") for x in responses]
 
     @classmethod
     def get_tasks_for_day_and_user(cls, date, user):
