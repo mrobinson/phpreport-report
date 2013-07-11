@@ -377,6 +377,23 @@ class TwikiUploader(object):
                                                                    self.password)))
         return request
 
+def choose_from_list(items):
+    assert(len(items) > 1)
+
+    print("\nMultiple {0}s matching description. Please choose one:".format(items[0].__class__.__name__.lower()))
+    for index, item in enumerate(items):
+        print("    {0}. {1}".format(index, item))
+
+    while(True):
+        try:
+            index = int(input(">> "))
+            if index >= 0 and index < len(items):
+                return items[index]
+        except ValueError:
+            pass
+
+        print("Not a valid index. Type a number between 0 and {0} and press enter.".format(len(items) - 1))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--login', type=str,
@@ -421,22 +438,31 @@ if __name__ == '__main__':
         if not len(projects):
             print("Could not find any projects matching '%s'" % args.project)
             sys.exit(1)
-        projects.sort()
-        project = projects[-1]
+        elif len(projects) > 1:
+            projects.sort(reverse=True)
+            project = choose_from_list(projects)
+        else:
+            project = projects[0]
 
     if args.customer != None:
         customers = filter_instances(list(Customer.instances.values()), args.customer)
         if not len(customers):
             print("Could not find any customers matching '%s'" % args.customer)
             sys.exit(1)
-        customer = customers[0]
+        elif len(customers) > 1:
+            customer = choose_from_list(customers)
+        else:
+            customer = customers[0]
 
     if args.user != None:
         users = [user for user in list(User.instances.values()) if user.login == args.user]
         if not len(users):
             print("Could not find any customers matching '%s'" % args.customer)
             sys.exit(1)
-        user = users[0]
+        elif len(users) > 1:
+            user = choose_from_list(users)
+        else:
+            user = users[0]
 
     task_filter = TaskFilter(project=project, customer=customer, user=user)
     time_periods = WeekOfWork.create_from_string(args.week, task_filter)

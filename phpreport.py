@@ -155,6 +155,9 @@ class Project(PHPReportObject):
             if child.tag == "endDate" and child.text:
                 self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
 
+    def __str__(self):
+        return self.description
+
     def match(self, term):
         return self.description.lower().find(term) != -1
 
@@ -178,6 +181,9 @@ class User(PHPReportObject):
             if child.tag == "login":
                 self.login = child.text
 
+    def __str__(self):
+        return self.login
+
     def match(self, term):
         return self.login.lower().find(term) != -1
 
@@ -188,6 +194,9 @@ class Customer(PHPReportObject):
                 self.id = int(child.text)
             if child.tag == "name":
                 self.name = child.text
+
+    def __str__(self):
+        return self.name
 
     def match(self, term):
         return self.name.lower().find(term) != -1
