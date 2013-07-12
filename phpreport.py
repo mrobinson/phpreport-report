@@ -305,8 +305,12 @@ class TaskFilter(object):
 
 class TaskFilter(TaskFilter):
     def to_url(self, phpreport):
-        url = "%s/getTasksFiltered.php?sid=%s&filterStartDate=%s&filterEndDate=%s&dateFormat=Y-m-d" % \
-              (phpreport.address, phpreport.session_id, str(self.start_date), str(self.end_date))
+        url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
+              (phpreport.address, phpreport.session_id)
+        if self.start_date:
+            url += "&filterStartDate=%s" % str(self.start_date)
+        if self.end_date:
+            url += "&filterEndDate=%s" % str(self.end_date)
         if self.project != None:
             url += "&projectId=%i" % self.project.id
         if self.customer != None:

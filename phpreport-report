@@ -40,15 +40,59 @@ import time
 import urllib.request, urllib.parse, urllib.error
 import urllib.request, urllib.error, urllib.parse
 
+class DateUtils(datetime.date):
+    @staticmethod
+    def from_week_number(year, week):
+        week_as_string = "%i %i 1" % (year, week)
+        date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
+
+        # ISO8601 considers the first week of the year the first one that contains
+        # a Thursday, but strptime does not. We need to account for that.
+        if datetime.date(year, 1, 4).isoweekday() > 4:
+            date -= datetime.timedelta(days=7)
+
+        return date
+
+    @staticmethod
+    def from_date_offset(date, day_offset):
+        return date + datetime.timedelta(day_offset)
+
+    @staticmethod
+    def week_number(date):
+        return date.isocalendar()[1]
+
+    @classmethod
+    def monday(cls, date):
+        return cls.from_week_number(date.year, cls.week_number(date))
+
+    @classmethod
+    def next_week(cls, date):
+        return cls.from_date_offset(date, 7)
+
+    @classmethod
+    def get_weeks_in_date_range(cls, start, end):
+        week = start = cls.monday(start)
+        end = cls.monday(end)
+
+        weeks = []
+        while week <= end:
+            weeks.append(week)
+            week = cls.next_week(week)
+        return weeks
+
+    @staticmethod
+    def format_delta(delta):
+        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+
+
 class PeriodOfWork(object):
-    def __init__(self, start_date, num_days, filter=TaskFilter()):
+    def __init__(self, start_date, num_days, filter=TaskFilter(), tasks=None):
         self.start_date = start_date
         self.num_days = num_days
         self.users = set()
-        self.tasks = None
+        self.tasks = tasks
         self.filter = filter.create_instance_for_dates(
-            self.get_date_for_day_offset(0),
-            self.get_date_for_day_offset(num_days - 1))
+            self.start_date, DateUtils.from_date_offset(self.start_date, num_days - 1))
 
     def get_users(self):
         self.get_tasks_if_necessary()
@@ -66,7 +110,7 @@ class PeriodOfWork(object):
     def filter_tasks(self, date=None, day_offset=None, user=None, only_onsite=False):
         self.get_tasks_if_necessary()
         if date == None and day_offset != None:
-            date = self.get_date_for_day_offset(day_offset)
+            date = DateUtils.from_date_offset(self.start_date, day_offset)
 
         def filter_task(task):
             if user != None and task.user != user:
@@ -79,10 +123,7 @@ class PeriodOfWork(object):
         return list(filter(filter_task, self.tasks))
 
     def get_all_dates(self):
-        return [self.start_date + datetime.timedelta(offset) for offset in range(0, self.num_days)]
-
-    def get_date_for_day_offset(self, day_offset):
-        return self.start_date + datetime.timedelta(day_offset)
+        return [DateUtils.from_date_offset(self.start_date, offset) for offset in range(0, self.num_days)]
 
     def time_worked(self, date=None, day_offset=None, user=None, only_onsite=False):
         return sum([task.length() for task in self.filter_tasks(date, day_offset, user, only_onsite)], datetime.timedelta())
@@ -94,19 +135,10 @@ class PeriodOfWork(object):
             pair[0].set_tasks(pair[1])
 
 class WeekOfWork(PeriodOfWork):
-    def __init__(self, week, year, filter=TaskFilter()):
+    def __init__(self, year, week, filter=TaskFilter(), tasks=None):
         self.week = week
         self.year = year
-
-        week_as_string = "%i %i 1" % (year, week)
-        start_date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
-
-        # ISO8601 considers the first week of the year the first one that contains
-        # a Thursday, but strptime does not. We need to account for that.
-        if datetime.date(year, 1, 4).isoweekday() > 4:
-            start_date -= datetime.timedelta(days=7)
-
-        super(WeekOfWork, self).__init__(start_date, 7, filter)
+        super(WeekOfWork, self).__init__(DateUtils.from_week_number(year, week), 7, filter, tasks)
 
     def __str__(self):
         return "Week %i of %i" % (self.week, self.year)
@@ -119,7 +151,7 @@ class WeekOfWork(PeriodOfWork):
 
     @classmethod
     def create_from_string(cls, string, filter):
-        default_year = datetime.datetime.today().isocalendar()[0]
+        default_year = datetime.datetime.today().year
 
         def split_single(string):
             if not '/' in string:
@@ -130,7 +162,7 @@ class WeekOfWork(PeriodOfWork):
 
         if not "-" in string and not "," in string:
             split = split_single(string)
-            return [cls(split[1], split[0], filter)]
+            return [cls(split[0], split[1], filter)]
 
         result = []
         for week_range in string.split(","):
@@ -144,25 +176,50 @@ class WeekOfWork(PeriodOfWork):
                 end = split_single(range_bounds[1])
 
             for week in range(start[1], end[1] + 1):
-                result.append(cls(week, start[0], filter))
+                result.append(cls(start[0], week, filter))
 
         cls.fetch_tasks_for_all(result)
         return result
 
+    @classmethod
+    def create_for_entire_project(cls, filter):
+        assert(filter.project)
 
-def format_delta(delta):
-    return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+        tasks = PHPReport.get_tasks_for_task_filters([filter])
+        tasks = [item for sublist in tasks for item in sublist]
+        if not tasks:
+            return []
+
+        first_date = last_date = tasks[0].date
+        for task in tasks[1:]:
+            if task.date < first_date:
+                first_date = task.date
+            if task.date > last_date:
+                last_date = task.date
+
+        week_dates = DateUtils.get_weeks_in_date_range(first_date, last_date)
+        weeks = [cls(date.year, DateUtils.week_number(date), filter=filter, tasks=[]) for date in week_dates]
+        weeks_dict = {"{0}-{1}".format(week.year, week.week):week for week in weeks}
+
+        for task in tasks:
+            (year, week) = task.date.isocalendar()[:2]
+            weeks_dict['{0}-{1}'.format(year, week)].tasks.append(task)
+
+        return weeks
 
 class AggregateReport(object):
     def __init__(self, time_periods, formatter):
         self.time_periods = time_periods
         self.formatter = formatter
 
-    def generate_report(self):
-        self.formatter.generate_header("%s to %s for %s" % \
+    def header(self):
+        return "%s to %s for %s" % \
             (self.time_periods[0],
              self.time_periods[-1],
-             self.time_periods[0].filter))
+             self.time_periods[0].filter)
+
+    def generate_report(self):
+        self.formatter.generate_header(self.header())
 
         table_contents = []
         total = datetime.timedelta()
@@ -172,15 +229,26 @@ class AggregateReport(object):
             amount_onsite = period.time_worked(only_onsite=True)
             total += amount
             total_onsite += amount_onsite
-            table_contents.append([period.short_string(), "%s (%s)" % (format_delta(amount), format_delta(amount_onsite))])
+            table_contents.append([period.short_string(), "%s (%s)" % (DateUtils.format_delta(amount), DateUtils.format_delta(amount_onsite))])
         self.formatter.generate_table(table_contents, has_headers=False)
 
-        self.formatter.generate_header("Total hours worked: %s" % format_delta(total))
-        self.formatter.generate_header("Total onsite hours worked: %s" % format_delta(total_onsite))
+        self.formatter.generate_header("Total hours worked: %s" % DateUtils.format_delta(total))
+        self.formatter.generate_header("Total onsite hours worked: %s" % DateUtils.format_delta(total_onsite))
         return self.formatter.flatten()
 
     def wiki_string(self):
         return "%sTo%s" % (self.time_periods[0].wiki_string(), self.time_periods[-1].wiki_string())
+
+class FullProjectReport(AggregateReport):
+    def __init__(self, project, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.project = project
+
+    def wiki_string(self):
+        return re.sub(r'[^a-zA-Z0-9]', '', self.project.description) + "Report"
+
+    def header(self):
+        return self.project.description
 
 class DetailedReport(object):
     def __init__(self, time_period, formatter):
@@ -193,9 +261,9 @@ class DetailedReport(object):
 
     def time_worked(self, user=None, total=False):
         if total:
-            return [format_delta(self.time_period.time_worked(user=user))]
+            return [DateUtils.format_delta(self.time_period.time_worked(user=user))]
         all_dates = self.time_period.get_all_dates()
-        return [format_delta(self.time_period.time_worked(date=x, user=user)) for x in all_dates]
+        return [DateUtils.format_delta(self.time_period.time_worked(date=x, user=user)) for x in all_dates]
 
     def generate_hours(self):
         table = []
@@ -211,7 +279,7 @@ class DetailedReport(object):
 
         onsite_time = self.time_period.time_worked(only_onsite=True)
         if onsite_time > datetime.timedelta(0):
-            self.formatter.generate_large_text("Onsite hours worked: %s" % format_delta(onsite_time))
+            self.formatter.generate_large_text("Onsite hours worked: %s" % DateUtils.format_delta(onsite_time))
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
@@ -346,6 +414,11 @@ class TwikiUploader(object):
         self.username=username
         self.password=password
 
+        password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        password_manager.add_password(None, self.url, self.username, self.password)
+        handler = urllib.request.HTTPBasicAuthHandler(password_manager)
+        urllib.request.install_opener(urllib.request.build_opener(handler))
+
     def add_links_for_short_strings(self, contents, time_periods):
         for time_period in time_periods:
             short_string = time_period.short_string()
@@ -368,13 +441,8 @@ class TwikiUploader(object):
         print("Uploading report to %s" % full_view_url)
 
         request = urllib.request.Request(full_save_url)
-        request.add_data(urllib.parse.urlencode({'text': contents.encode('latin1')}))
+        request.add_data(urllib.parse.urlencode({'text': contents.encode('latin1')}).encode('latin1'))
 
-        if self.username and self.password:
-            request.add_header('Authorization',
-                               'Basic ' + \
-                               base64.urlsafe_b64encode("%s:%s" % (self.username,
-                                                                   self.password)))
         return request
 
 def choose_from_list(items):
@@ -405,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--user', type=str,
                         help="only consider tasks logged by the given user")
     parser.add_argument('-w', '--week', type=str,
-                        default = str(datetime.datetime.today().isocalendar()[1]),
+                        default=None,
                         help="week or week range of tasks to show")
     parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
                         default="text", help="output format for report")
@@ -415,6 +483,10 @@ if __name__ == '__main__':
 
     if not args.project and not args.customer and not args.user:
         print("Must give either a customer (-c) search string or a product search string (-p)")
+        sys.exit(1)
+
+    if not args.week and not args.project:
+        print("Must give either a project (-p) or a week range (-w)")
         sys.exit(1)
 
     PHPReport.login(username=args.login)
@@ -465,7 +537,12 @@ if __name__ == '__main__':
             user = users[0]
 
     task_filter = TaskFilter(project=project, customer=customer, user=user)
-    time_periods = WeekOfWork.create_from_string(args.week, task_filter)
+
+    assert(args.week or args.project)
+    if not args.week:
+        time_periods = WeekOfWork.create_for_entire_project(task_filter)
+    elif args.week:
+        time_periods = WeekOfWork.create_from_string(args.week, task_filter)
 
     if args.twiki:
         args.formatter = "twiki"
@@ -476,7 +553,11 @@ if __name__ == '__main__':
 
     reports = []
     if len(time_periods) > 1:
-        reports.append(AggregateReport(time_periods, formatter_class()))
+        if not args.week:
+            reports.append(FullProjectReport(project, time_periods, formatter_class()))
+        else:
+            reports.append(AggregateReport(time_periods, formatter_class()))
+
     if len(time_periods) == 1 or args.twiki:
         for period in time_periods:
             reports.append(DetailedReport(period, formatter_class()))
