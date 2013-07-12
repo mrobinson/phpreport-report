@@ -59,11 +59,11 @@ class DateUtils(datetime.date):
 
     @staticmethod
     def week_number(date):
-        return date.isocalendar()[1]
+        return date.isocalendar()[:2]
 
     @classmethod
     def monday(cls, date):
-        return cls.from_week_number(date.year, cls.week_number(date))
+        return cls.from_week_number(*cls.week_number(date))
 
     @classmethod
     def next_week(cls, date):
@@ -201,7 +201,7 @@ class WeekOfWork(PeriodOfWork):
                 last_date = task.date
 
         week_dates = DateUtils.get_weeks_in_date_range(first_date, last_date)
-        weeks = [cls(date.year, DateUtils.week_number(date), filter=filter, tasks=[]) for date in week_dates]
+        weeks = [cls(*DateUtils.week_number(date), filter=filter, tasks=[]) for date in week_dates]
         weeks_dict = {"{0}-{1}".format(week.year, week.week):week for week in weeks}
 
         for task in tasks:
