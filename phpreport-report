@@ -103,9 +103,12 @@ class PeriodOfWork(object):
             PeriodOfWork.fetch_tasks_for_all([self])
 
     def set_tasks(self, tasks):
-        self.tasks = tasks
-        for task in self.tasks:
-            self.users.add(task.user)
+        for task in tasks:
+            self.add_task(task)
+
+    def add_task(self, task):
+        self.tasks.append(task)
+        self.users.add(task.user)
 
     def filter_tasks(self, date=None, day_offset=None, user=None, only_onsite=False):
         self.get_tasks_if_necessary()
@@ -203,7 +206,7 @@ class WeekOfWork(PeriodOfWork):
 
         for task in tasks:
             (year, week) = task.date.isocalendar()[:2]
-            weeks_dict['{0}-{1}'.format(year, week)].tasks.append(task)
+            weeks_dict['{0}-{1}'.format(year, week)].add_task(task)
 
         return weeks
 
