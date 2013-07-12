@@ -462,38 +462,11 @@ def choose_from_list(items):
 
         print("Not a valid index. Type a number between 0 and {0} and press enter.".format(len(items) - 1))
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--login', type=str,
-                        help="login name for PHPReport and TWiki")
-    parser.add_argument('-p', '--project', type=str,
-                        help="only consider tasks matching given project search string")
-    parser.add_argument('-c', '--customer', type=str,
-                        help="only consider tasks matching given customer search string")
-    parser.add_argument('-u', '--user', type=str,
-                        help="only consider tasks logged by the given user")
-    parser.add_argument('-w', '--week', type=str,
-                        default=None,
-                        help="week or week range of tasks to show")
-    parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
-                        default="text", help="output format for report")
-    parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
-                        help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
-    args = parser.parse_args()
-
-    if not args.project and not args.customer and not args.user:
-        print("Must give either a customer (-c) search string or a product search string (-p)")
-        sys.exit(1)
-
-    if not args.week and not args.project:
-        print("Must give either a project (-p) or a week range (-w)")
-        sys.exit(1)
-
-    PHPReport.login(username=args.login)
-
+def create_task_filter_from_args(args):
     customer = None
     project = None
     user = None
+
     def filter_instances(instances, search_string):
         terms = search_string.lower().split(',')
         def matches_all(instance):
@@ -536,38 +509,98 @@ if __name__ == '__main__':
         else:
             user = users[0]
 
-    task_filter = TaskFilter(project=project, customer=customer, user=user)
+    return TaskFilter(project=project, customer=customer, user=user)
 
-    assert(args.week or args.project)
-    if not args.week:
-        time_periods = WeekOfWork.create_for_entire_project(task_filter)
-    elif args.week:
-        time_periods = WeekOfWork.create_from_string(args.week, task_filter)
 
-    if args.twiki:
-        args.formatter = "twiki"
-    if args.formatter == "twiki":
-        formatter_class = TwikiFormatter
-    else:
-        formatter_class = TextFormatter
+class ReportCreator(object):
+    class Mode:
+        Project, Aggregate, Detail = range(3)
 
-    reports = []
-    if len(time_periods) > 1:
+    def __init__(self, args, task_filter):
+        self.args = args
+        self.task_filter = task_filter
+
+        # This may actually fetch the tasks as a side-effect.
         if not args.week:
-            reports.append(FullProjectReport(project, time_periods, formatter_class()))
+            self.time_periods = WeekOfWork.create_for_entire_project(task_filter)
+            self.mode = ReportCreator.Mode.Project
+
+        elif args.week:
+            self.time_periods = WeekOfWork.create_from_string(args.week, task_filter)
+            if len(self.time_periods) > 1:
+                self.mode = ReportCreator.Mode.Aggregate
+            else:
+                self.mode = ReportCreator.Mode.Detail
+
+        self.parent_report = None
+        self.reports = []
+
+    def formatter(self):
+        if self.args.formatter == "twiki" or args.twiki:
+            return TwikiFormatter()
         else:
-            reports.append(AggregateReport(time_periods, formatter_class()))
+            return TextFormatter()
 
-    if len(time_periods) == 1 or args.twiki:
-        for period in time_periods:
-            reports.append(DetailedReport(period, formatter_class()))
+    def create_parent_report(self):
+        if self.mode == ReportCreator.Mode.Project:
+            return FullProjectReport(self.task_filter.project, self.time_periods, self.formatter())
+        elif self.mode == ReportCreator.Mode.Aggregate:
+            return AggregateReport(self.time_periods, self.formatter())
+        else:
+            return None
 
-    if args.twiki:
-        uploader = TwikiUploader(url=args.twiki,
-                                 username=PHPReport.credential.username,
-                                 password=PHPReport.credential.password)
-        uploader.upload(reports, time_periods)
-        sys.exit(0)
+    def create_reports(self):
+        self.parent_report = self.create_parent_report()
+        if self.parent_report:
+            self.reports.append(self.parent_report)
 
-    for report in reports:
-        print(report.generate_report())
+        # TODO: In TWiki mode we always output reports for the entire project,
+        #  but this should probably be more consistent with an explicit summary mode.
+        if self.mode == ReportCreator.Mode.Detail or args.twiki:
+            for period in self.time_periods:
+                self.reports.append(DetailedReport(period, self.formatter()))
+
+    def output_reports(self):
+        if args.twiki:
+            uploader = TwikiUploader(url=self.args.twiki,
+                                     username=PHPReport.credential.username,
+                                     password=PHPReport.credential.password)
+            uploader.upload(self.reports, self.time_periods)
+        else:
+            for report in self.reports:
+                print(report.generate_report())
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--login', type=str,
+                        help="login name for PHPReport and TWiki")
+    parser.add_argument('-p', '--project', type=str,
+                        help="only consider tasks matching given project search string")
+    parser.add_argument('-c', '--customer', type=str,
+                        help="only consider tasks matching given customer search string")
+    parser.add_argument('-u', '--user', type=str,
+                        help="only consider tasks logged by the given user")
+    parser.add_argument('-w', '--week', type=str,
+                        default=None,
+                        help="week or week range of tasks to show")
+    parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
+                        default="text", help="output format for report")
+    parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
+                        help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
+    args = parser.parse_args()
+
+    if not args.project and not args.customer and not args.user:
+        print("Must give either a customer (-c) search string or a product search string (-p)")
+        sys.exit(1)
+
+    if not args.week and not args.project:
+        print("Must give either a project (-p) or a week range (-w)")
+        sys.exit(1)
+
+    PHPReport.login(username=args.login)
+
+    report_creator = ReportCreator(args, create_task_filter_from_args(args))
+    report_creator.create_reports()
+    report_creator.output_reports()
+
