@@ -103,6 +103,7 @@ class PeriodOfWork(object):
             PeriodOfWork.fetch_tasks_for_all([self])
 
     def set_tasks(self, tasks):
+        self.tasks = []
         for task in tasks:
             self.add_task(task)
 
