@@ -37,6 +37,7 @@ http.client.HTTPConnection.debuglevel = 0
 
 class Credential(object):
     all_credentials = {}
+    password_manager = None
 
     @classmethod
     def for_url(cls, url, username=None):
@@ -57,7 +58,7 @@ class Credential(object):
         cls.all_credentials[key] = credential
         return credential
 
-    def __init__(self, url, username, password, saved):
+    def __init__(self, url, username, password, saved=False):
         self.url = url
         self.username = username
         self.password = password
@@ -69,6 +70,17 @@ class Credential(object):
         if input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
             return
         keyring.set_password("PHPReport", self.username, self.password)
+
+    def activate(self):
+        cls = type(self)
+        if cls.password_manager:
+            cls.password_manager.add_password(None, self.url, self.username, self.password)
+            return
+
+        cls.password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        urllib.request.install_opener(urllib.request.build_opener(
+            urllib.request.HTTPBasicAuthHandler(cls.password_manager)))
+        self.activate()
 
     def __eq__(self, other):
         return self.url == other.url and self.username == other.username
@@ -230,11 +242,7 @@ class PHPReport(object):
         cls.address = address
         cls.projects = {}
         cls.credential = Credential.for_url(address, username)
-
-        password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        password_manager.add_password(None, cls.address, cls.credential.username, cls.credential.password)
-        handler = urllib.request.HTTPBasicAuthHandler(password_manager)
-        urllib.request.install_opener(urllib.request.build_opener(handler))
+        cls.credential.activate()
 
         print("Logging in...")
         response = cls.get_contents_of_url("%s/loginService.php?login=%s&password=%s" %

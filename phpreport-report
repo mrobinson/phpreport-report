@@ -23,6 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from phpreport import Credential
 from phpreport import Customer
 from phpreport import Project
 from phpreport import PHPReport
@@ -427,13 +428,9 @@ class TwikiUploader(object):
     def __init__(self, url, section="Main", username=None, password=None):
         self.url = url
         self.section = section
-        self.username=username
-        self.password=password
 
-        password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        password_manager.add_password(None, self.url, self.username, self.password)
-        handler = urllib.request.HTTPBasicAuthHandler(password_manager)
-        urllib.request.install_opener(urllib.request.build_opener(handler))
+        # Ensure that we can log in to the TWiki with HTTP authentication.
+        Credential(self.url, username, password).activate()
 
     def add_links_for_short_strings(self, contents, reports):
         for report in reports:
