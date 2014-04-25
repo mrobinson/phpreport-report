@@ -141,7 +141,7 @@ class Task(PHPReportObject):
                 self.project_id = int(child.text)
                 self.project = Project.find(self.project_id)
             elif child.tag == "customerId":
-                self.customer_id = int(child.text)
+                self.customer_id = child.text
             elif child.tag == "taskStoryId":
                 self.task_story_id = child.text
             elif child.tag == "telework" and child.text == "true":
