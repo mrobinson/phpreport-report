@@ -99,6 +99,12 @@ class PHPReportObject(object):
         for instance in instances:
             cls.instances[instance.id] = instance
 
+    @staticmethod
+    def id_string_to_integer(string):
+        if not string:
+            return -1
+        return int(string)
+
 class Task(PHPReportObject):
     def __init__(self, task_xml):
         self.text = ""
@@ -135,13 +141,13 @@ class Task(PHPReportObject):
             elif child.tag == "phase":
                 self.phase = child.text
             elif child.tag == "userId":
-                self.user_id = int(child.text)
+                self.user_id = PHPReportObject.id_string_to_integer(child.text)
                 self.user = User.find(self.user_id)
             elif child.tag == "projectId" and child.text:
-                self.project_id = int(child.text)
+                self.project_id = PHPReportObject.id_string_to_integer(child.text)
                 self.project = Project.find(self.project_id)
             elif child.tag == "customerId":
-                self.customer_id = int(child.text)
+                self.customer_id = PHPReportObject.id_string_to_integer(child.text)
             elif child.tag == "taskStoryId":
                 self.task_story_id = child.text
             elif child.tag == "telework" and child.text == "true":
