@@ -611,7 +611,7 @@ if __name__ == '__main__':
                         help="only consider tasks logged by the given user")
     parser.add_argument('-w', '--week', type=str,
                         default=None,
-                        help="week or week range of tasks to show")
+                        help="Week or week range of tasks to show. A year can optionally be specified using the syntax <week>/<year>.")
     parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
                         default="text", help="output format for report")
     parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
