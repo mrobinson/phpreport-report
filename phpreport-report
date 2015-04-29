@@ -573,13 +573,10 @@ class ReportCreator(object):
     def create_reports(self):
         self.parent_report = self.create_parent_report()
 
-        # TODO: In TWiki mode we always output reports for the entire project,
-        # but this should probably be more consistent with an explicit summary mode.
-        if self.mode == ReportCreator.Mode.Detail or args.twiki:
-            for period in self.time_periods:
-                self.reports.append(DetailedReport(time_period=period,
-                                                   parent=self.parent_report,
-                                                   formatter=self.formatter()))
+        for period in self.time_periods:
+            self.reports.append(DetailedReport(time_period=period,
+                                               parent=self.parent_report,
+                                               formatter=self.formatter()))
 
     def output_report_list(self, report_list):
         if args.twiki:
@@ -592,11 +589,15 @@ class ReportCreator(object):
                 print(report.generate_report())
 
     def output_reports(self):
-        # We output the parent first, because for the TWiki uploader, the children
-        # depend on the existence of the parent.
-        if self.parent_report:
+        # We output the parent first for the Twiki uploader,
+        # because the children depend on the existence of the parent.
+        if args.twiki and self.parent_report:
             self.output_report_list([self.parent_report])
+
         self.output_report_list(self.reports)
+
+        if not(args.twiki) and self.parent_report:
+            self.output_report_list([self.parent_report])
 
 
 if __name__ == '__main__':
