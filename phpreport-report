@@ -212,20 +212,20 @@ class WeekOfWork(PeriodOfWork):
 
         return weeks
 
-class AggregateReport(object):
-    def __init__(self, time_periods, formatter):
+class Report(object):
+    def __init__(self, header, wiki_string):
+        self.header = header
+        self.wiki_string = wiki_string
+
+class AggregateReport(Report):
+    def __init__(self, time_periods, formatter, header, wiki_string):
+        super().__init__(header, wiki_string)
         self.time_periods = time_periods
         self.formatter = formatter
         self.parent = None
 
-    def header(self):
-        return "%s to %s for %s" % \
-            (self.time_periods[0],
-             self.time_periods[-1],
-             self.time_periods[0].filter)
-
     def generate_report(self):
-        self.formatter.generate_header(self.header())
+        self.formatter.generate_header(self.header)
 
         table_contents = []
         total = datetime.timedelta()
@@ -242,22 +242,17 @@ class AggregateReport(object):
         self.formatter.generate_header("Total onsite hours worked: %s" % DateUtils.format_delta(total_onsite))
         return self.formatter.flatten()
 
-    def wiki_string(self):
-        return "%sTo%s" % (self.time_periods[0].wiki_string(), self.time_periods[-1].wiki_string())
-
-class FullProjectReport(AggregateReport):
-    def __init__(self, project, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.project = project
-
-    def wiki_string(self):
-        return re.sub(r'[^a-zA-Z0-9]', '', self.project.description) + "Report"
-
-    def header(self):
-        return self.project.description
-
-class DetailedReport(object):
+class DetailedReport(Report):
     def __init__(self, time_period, parent, formatter):
+        if parent:
+            header = "{0} for {1}".format(time_period, parent.header)
+            wiki_string = "{0}-{1}".format(parent.wiki_string, time_period.wiki_string())
+        else:
+            header = "{0} for {1}".format(time_period, str(time_period.filter))
+            wiki_string = time_period.wiki_string()
+
+        super().__init__(header, wiki_string)
+
         self.time_period = time_period
         self.formatter = formatter
         self.parent = parent
@@ -302,26 +297,14 @@ class DetailedReport(object):
         contents = [(date.strftime("%A"), self.get_stories_for_day_and_user(user, date)) for date in all_dates]
         self.formatter.generate_aligned_list(contents)
 
-    def header(self):
-        if self.parent:
-            topic = self.parent.header()
-        else:
-            topic = str(self.time_period.filter)
-        return "{0} for {1}".format(self.time_period, topic)
-
     def generate_report(self):
         self.pieces = []
-        self.formatter.generate_header(self.header())
+        self.formatter.generate_header(self.header)
         self.generate_hours()
         for user in self.time_period.users:
             self.generate_stories_for_user(user)
         return self.formatter.flatten()
 
-    def wiki_string(self):
-        if self.parent:
-           return "{0}-{1}".format(self.parent.wiki_string(), self.time_period.wiki_string())
-        else:
-            return self.time_period.wiki_string()
 
 class TextFormatter(object):
     def __init__(self):
@@ -564,9 +547,20 @@ class ReportCreator(object):
 
     def create_parent_report(self):
         if self.mode == ReportCreator.Mode.Project:
-            return FullProjectReport(self.task_filter.project, self.time_periods, self.formatter())
+            project = self.task_filter.project
+            return AggregateReport(self.time_periods, self.formatter(),
+                                   project.description,
+                                   re.sub(r'[^a-zA-Z0-9]', '', project.description) + "Report")
+
         elif self.mode == ReportCreator.Mode.Aggregate:
-            return AggregateReport(self.time_periods, self.formatter())
+            return AggregateReport(self.time_periods, self.formatter(),
+                                   "%s to %s for %s" % \
+                                       (self.time_periods[0],
+                                        self.time_periods[-1],
+                                        self.time_periods[0].filter),
+                                   "%sTo%s" % \
+                                       (self.time_periods[0].wiki_string(),
+                                        self.time_periods[-1].wiki_string()))
         else:
             return None
 
