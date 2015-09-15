@@ -31,7 +31,7 @@ import sys
 import urllib
 import xml.etree.ElementTree as ElementTree
 
-DEFAULT_PHPREPORT_ADDRESS = "https://beta.phpreport.igalia.com/web/services"
+DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
 http.client.HTTPConnection.debuglevel = 0
 
