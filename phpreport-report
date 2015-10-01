@@ -382,7 +382,9 @@ class TextFormatter(object):
                                                    width=width,
                                                    initial_indent=indent,
                                                    subsequent_indent=indent))
-            self.pieces.append(format_string % (content[0], "\n".join(second_column).strip()))
+            text = "\n".join(second_column).strip()
+            if text:
+                self.pieces.append(format_string % (content[0], text))
 
     def generate_header(self, header):
         self.pieces.append("\n%s\n" % header)
