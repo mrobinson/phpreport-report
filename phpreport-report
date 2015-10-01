@@ -276,6 +276,9 @@ class AggregateReport(Report):
 
 
 class DetailedReport(Report):
+
+    EOS = "PhpReportReportEOS"
+
     def __init__(self, time_period, parent, formatter):
         if parent:
             header = "{0} for {1}".format(time_period, parent.header)
@@ -318,7 +321,7 @@ class DetailedReport(Report):
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
-        all_stories = " ".join([task.text + " (" + DateUtils.format_delta(task.length()) + " " + task.story + ")" for task in tasks_for_day])
+        all_stories = " ".join([task.text + " (" + DateUtils.format_delta(task.length()) + " " + task.story + ")" + self.EOS for task in tasks_for_day])
 
         # Strip out duplicated whitespace
         return re.compile(r'\s+').sub(' ', all_stories).strip()
@@ -328,7 +331,7 @@ class DetailedReport(Report):
 
         all_dates = self.time_period.get_all_dates()
         contents = [(date.strftime("%A"), self.get_stories_for_day_and_user(user, date)) for date in all_dates]
-        self.formatter.generate_aligned_list(contents)
+        self.formatter.generate_aligned_list(contents, self.EOS)
 
     def generate_report(self):
         self.pieces = []
@@ -365,19 +368,21 @@ class TextFormatter(object):
         for row in table[1:]:
             self.generate_table_row(row, lengths)
 
-    def generate_aligned_list(self, contents):
+    def generate_aligned_list(self, contents, separator = None):
         first_column_size = max([len(content[0]) for content in contents])
         format_string = "%%%i.%is: %%s\n" % (first_column_size, first_column_size)
 
         indent = (first_column_size + 2) * ' '  # Enough to account for the day name offset.
         width = 80 - len(indent)
         for content in contents:
-            second_column = textwrap.fill(content[1],
-                                          break_long_words=False,  # Don't break URLs.
-                                          width=width,
-                                          initial_indent=indent,
-                                          subsequent_indent=indent).strip()
-            self.pieces.append(format_string % (content[0], second_column))
+            second_column = []
+            for item in content[1].split(separator):
+                second_column.append(textwrap.fill(item.strip(),
+                                                   break_long_words=False,  # Don't break URLs.
+                                                   width=width,
+                                                   initial_indent=indent,
+                                                   subsequent_indent=indent))
+            self.pieces.append(format_string % (content[0], "\n".join(second_column).strip()))
 
     def generate_header(self, header):
         self.pieces.append("\n%s\n" % header)
@@ -430,9 +435,13 @@ class TwikiFormatter(TextFormatter):
     def generate_section_header(self, header):
         self.pieces.append("\n---++++%s\n" % header)
 
-    def generate_aligned_list(self, contents):
+    def generate_aligned_list(self, contents, separator = None):
         for content in contents:
-            self.pieces.append("   * *%s* - %s\n" % (content[0], content[1]))
+            if separator is not None:
+                text = content[1].replace(separator, "")
+            else:
+                text = content[1]
+            self.pieces.append("   * *%s* - %s\n" % (content[0], text))
 
 
 def send_url_request(request):
