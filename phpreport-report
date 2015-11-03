@@ -142,6 +142,14 @@ class PeriodOfWork(object):
                     self.filter_tasks(date, day_offset, user, only_onsite)],
                    datetime.timedelta())
 
+    def stories(self):
+        stories = {}
+        self.get_tasks_if_necessary()
+        for task in self.tasks:
+            stories.setdefault(task.story, datetime.timedelta())
+            stories[task.story] += task.length()
+        return stories
+
     @staticmethod
     def fetch_tasks_for_all(periods):
         filters = [period.filter for period in periods]
@@ -261,11 +269,23 @@ class AggregateReport(Report):
         table_contents = []
         total = datetime.timedelta()
         total_onsite = datetime.timedelta()
+        total_stories = {}
         for period in self.time_periods:
             (time, time_onsite) = self.generate_report_for_period(period, table_contents)
             total += time
             total_onsite += time_onsite
 
+            stories = period.stories()
+            for story in stories:
+                total_stories.setdefault(story, datetime.timedelta())
+                total_stories[story] += stories[story]
+
+        self.formatter.generate_table(table_contents, has_headers=False)
+
+        self.formatter.generate_header("Total hours per story")
+        table_contents = []
+        for story in total_stories:
+            table_contents.append([story, "%s" % DateUtils.format_delta(total_stories[story])])
         self.formatter.generate_table(table_contents, has_headers=False)
 
         self.formatter.generate_header(
