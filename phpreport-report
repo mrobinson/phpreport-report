@@ -270,7 +270,7 @@ class DetailedReport(Report):
     def generate_hours(self):
         table = []
         table.append([""] + list(map(DetailedReport.format_date, self.time_period.get_all_dates())) + ["Total"])
-        for user in self.time_period.get_users():
+        for user in sorted(self.time_period.get_users()):
             table.append([user.login] + \
                          self.time_worked(user=user) + \
                          self.time_worked(user=user, total=True))
@@ -301,7 +301,7 @@ class DetailedReport(Report):
         self.pieces = []
         self.formatter.generate_header(self.header)
         self.generate_hours()
-        for user in self.time_period.users:
+        for user in sorted(self.time_period.users):
             self.generate_stories_for_user(user)
         return self.formatter.flatten()
 
