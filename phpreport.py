@@ -202,6 +202,9 @@ class User(PHPReportObject):
     def __str__(self):
         return self.login
 
+    def __lt__(self, other):
+        return self.login < other.login
+
     def match(self, term):
         return self.login.lower().find(term) != -1
 
