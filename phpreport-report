@@ -422,7 +422,7 @@ class TwikiUploader(object):
 
             short_string = report.time_period.short_string()
             contents = re.sub("%s(\W)" % short_string,
-                              "[[%s][%s]]\g<1>" % (report.wiki_string(), short_string),
+                              "[[%s][%s]]\g<1>" % (report.wiki_string, short_string),
                               contents)
         return contents
 
@@ -432,7 +432,7 @@ class TwikiUploader(object):
         return pool.map(send_url_request, requests)
 
     def prepare_report(self, report, all_reports):
-        page_name = report.wiki_string()
+        page_name = report.wiki_string
 
         full_save_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
         full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
@@ -443,10 +443,9 @@ class TwikiUploader(object):
         contents = self.add_links_for_short_strings(report.generate_report(), all_reports)
         request_data = { 'text': contents.encode('latin1') }
         if report.parent:
-            request_data['topicparent'] = report.parent.wiki_string()
+            request_data['topicparent'] = report.parent.wiki_string
 
-        request.add_data(urllib.parse.urlencode(request_data).encode('latin1'))
-
+        request.data = urllib.parse.urlencode(request_data).encode('latin1')
         return request
 
 def choose_from_list(items):
