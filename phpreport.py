@@ -247,6 +247,18 @@ class PHPReport(object):
             sys.exit(1)
 
     @classmethod
+    def send_login_request(cls, address, username, password):
+        url = "%s/loginService.php" % address
+        r = urllib.request.Request(url, None)
+        auth_string = bytes('%s:%s' % (username, password), 'UTF-8')
+        r.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
+        try:
+            return urllib.request.urlopen(r).read()
+        except Exception as e:
+            print("Could not complete login request to %s" % url)
+            sys.exit(1)
+
+    @classmethod
     def login(cls, address=DEFAULT_PHPREPORT_ADDRESS, username=None):
         cls.address = address
         cls.projects = {}
@@ -254,8 +266,7 @@ class PHPReport(object):
         cls.credential.activate()
 
         print("Logging in...")
-        response = cls.get_contents_of_url("%s/loginService.php?login=%s&password=%s" %
-                                            (cls.address, cls.credential.username, cls.credential.password))
+        response = cls.send_login_request(cls.address, cls.credential.username, cls.credential.password)
 
         cls.session_id = None
         tree = ElementTree.fromstring(response)
