@@ -505,7 +505,7 @@ def create_task_filter_from_args(args):
     if args.user != None:
         users = [user for user in list(User.instances.values()) if user.login == args.user]
         if not len(users):
-            print("Could not find any customers matching '%s'" % args.customer)
+            print("Could not find any users matching '%s'" % args.user)
             sys.exit(1)
         elif len(users) > 1:
             user = choose_from_list(users)
