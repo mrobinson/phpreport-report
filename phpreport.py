@@ -283,7 +283,7 @@ class PHPReport(object):
         # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
         print("Loading PHPReport data...")
         responses = fetch_urls_in_parallel([
-            "%s/getCustomerProjectsService.php?sid=%s" % (cls.address, PHPReport.session_id),
+            "%s/getProjectsService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getAllUsersService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getUserCustomersService.php?sid=%s" % (cls.address, PHPReport.session_id),
         ])
