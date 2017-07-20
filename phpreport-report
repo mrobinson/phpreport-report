@@ -224,6 +224,17 @@ class AggregateReport(Report):
         self.formatter = formatter
         self.parent = None
 
+    def generate_report_for_period(self, period, table_contents):
+        amount = period.time_worked()
+        amount_onsite = period.time_worked(only_onsite=True)
+
+        hours_worked_string = DateUtils.format_delta(amount)
+        if amount_onsite:
+            hours_worked_string += " (%s onsite)" % DateUtils.format_delta(amount_onsite)
+
+        table_contents.append([period.short_string(), hours_worked_string])
+        return (amount, amount_onsite)
+
     def generate_report(self):
         self.formatter.generate_header(self.header)
 
@@ -231,11 +242,10 @@ class AggregateReport(Report):
         total = datetime.timedelta()
         total_onsite = datetime.timedelta()
         for period in self.time_periods:
-            amount = period.time_worked()
-            amount_onsite = period.time_worked(only_onsite=True)
-            total += amount
-            total_onsite += amount_onsite
-            table_contents.append([period.short_string(), "%s (%s)" % (DateUtils.format_delta(amount), DateUtils.format_delta(amount_onsite))])
+            (time, time_onsite) = self.generate_report_for_period(period, table_contents)
+            total += time
+            total_onsite += time_onsite
+
         self.formatter.generate_table(table_contents, has_headers=False)
 
         self.formatter.generate_header("Total hours worked: %s" % DateUtils.format_delta(total))
