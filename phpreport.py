@@ -35,6 +35,7 @@ DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
 http.client.HTTPConnection.debuglevel = 0
 
+
 class Credential(object):
     all_credentials = {}
     password_manager = None
@@ -105,6 +106,7 @@ class PHPReportObject(object):
             return -1
         return int(string)
 
+
 class Task(PHPReportObject):
     def __init__(self, task_xml):
         self.text = ""
@@ -134,9 +136,9 @@ class Task(PHPReportObject):
                 if self.end_time.hour == 0 and self.end_time.minute == 0:
                     self.end_time += datetime.timedelta(hours=24)
 
-            elif child.tag == "story" and child.text != None:
+            elif child.tag == "story" and child.text is not None:
                 self.story = child.text
-            elif child.tag == "text" and child.text != None:
+            elif child.tag == "text" and child.text is not None:
                 self.text = child.text
             elif child.tag == "phase":
                 self.phase = child.text
@@ -157,6 +159,7 @@ class Task(PHPReportObject):
 
     def length(self):
         return self.end_time - self.init_time
+
 
 class Project(PHPReportObject):
     def __init__(self, project_xml):
@@ -188,8 +191,9 @@ class Project(PHPReportObject):
         if other.has_ended() and not self.has_ended():
             return False
         if self.init_date and other.init_date:
-            return self.init_date <  other.init_date
+            return self.init_date < other.init_date
         return self.id < other.id
+
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
@@ -208,6 +212,7 @@ class User(PHPReportObject):
     def match(self, term):
         return self.login.lower().find(term) != -1
 
+
 class Customer(PHPReportObject):
     def __init__(self, customer_xml):
         for child in customer_xml.getchildren():
@@ -222,12 +227,15 @@ class Customer(PHPReportObject):
     def match(self, term):
         return self.name.lower().find(term) != -1
 
+
 def get_url_contents(url):
     return PHPReport.get_contents_of_url(url)
+
 
 def fetch_urls_in_parallel(urls):
     pool = multiprocessing.Pool(processes=URLS_TO_FETCH_IN_PARALLEL)
     return pool.map(get_url_contents, urls)
+
 
 class PHPReport(object):
     users = {}
@@ -242,7 +250,7 @@ class PHPReport(object):
         r = urllib.request.Request(url, None)
         try:
             return urllib.request.urlopen(r).read()
-        except Exception as e:
+        except Exception:
             print("Could not complete request to %s" % sanitize_url_for_display(url))
             sys.exit(1)
 
@@ -254,7 +262,7 @@ class PHPReport(object):
         r.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
         try:
             return urllib.request.urlopen(r).read()
-        except Exception as e:
+        except Exception:
             print("Could not complete login request to %s" % url)
             sys.exit(1)
 
@@ -303,10 +311,10 @@ class PHPReport(object):
 
     @classmethod
     def get_tasks_for_day_and_user(cls, date, user):
-        tasks = []
         response = cls.get_contents_of_url("%s/getUserTasksService.php?sid=%s&login=%s&date=%s&dateFormat=Y-m-d" %
                                            (cls.address, cls.session_id, user.login, str(date)))
         return cls.create_objects_from_response(response, Task, "task")
+
 
 class TaskFilter(object):
     def __init__(self, project=None, customer=None, user=None):
@@ -331,6 +339,7 @@ class TaskFilter(object):
         task_filter.end_date = end_date
         return task_filter
 
+
 class TaskFilter(TaskFilter):
     def to_url(self, phpreport):
         url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
@@ -339,11 +348,10 @@ class TaskFilter(TaskFilter):
             url += "&filterStartDate=%s" % str(self.start_date)
         if self.end_date:
             url += "&filterEndDate=%s" % str(self.end_date)
-        if self.project != None:
+        if self.project is not None:
             url += "&projectId=%i" % self.project.id
-        if self.customer != None:
+        if self.customer is not None:
             url += "&customerId=%i" % self.customer.id
-        if self.user != None:
+        if self.user is not None:
             url += "&userId=%i" % self.user.id
         return url
-

@@ -31,15 +31,15 @@ from phpreport import User
 from phpreport import TaskFilter
 
 import argparse
-import base64
 import datetime
 import multiprocessing
 import re
 import textwrap
 import sys
-import time
-import urllib.request, urllib.parse, urllib.error
-import urllib.request, urllib.error, urllib.parse
+import urllib.request
+import urllib.parse
+import urllib.error
+
 
 class DateUtils(datetime.date):
     @staticmethod
@@ -47,8 +47,9 @@ class DateUtils(datetime.date):
         week_as_string = "%i %i 1" % (year, week)
         date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
 
-        # ISO8601 considers the first week of the year the first one that contains
-        # a Thursday, but strptime does not. We need to account for that.
+        # ISO8601 considers the first week of the year the first one that
+        # contains a Thursday, but strptime does not. We need to account
+        # for that.
         if datetime.date(year, 1, 4).isoweekday() > 4:
             date -= datetime.timedelta(days=7)
 
@@ -83,7 +84,9 @@ class DateUtils(datetime.date):
 
     @staticmethod
     def format_delta(delta):
-        return "%02i:%02i" % (delta.days * 24 + delta.seconds // 3600, (delta.seconds // 60) % 60)
+        hours = (delta.days * 24) + (delta.seconds // 3600)
+        seconds = (delta.seconds // 60) % 60
+        return "%02i:%02i" % (hours, seconds)
 
 
 class PeriodOfWork(object):
@@ -93,14 +96,15 @@ class PeriodOfWork(object):
         self.users = set()
         self.tasks = tasks
         self.filter = filter.create_instance_for_dates(
-            self.start_date, DateUtils.from_date_offset(self.start_date, num_days - 1))
+            self.start_date,
+            DateUtils.from_date_offset(self.start_date, num_days - 1))
 
     def get_users(self):
         self.get_tasks_if_necessary()
         return self.users
 
     def get_tasks_if_necessary(self):
-        if self.tasks == None:
+        if self.tasks is None:
             PeriodOfWork.fetch_tasks_for_all([self])
 
     def set_tasks(self, tasks):
@@ -112,15 +116,16 @@ class PeriodOfWork(object):
         self.tasks.append(task)
         self.users.add(task.user)
 
-    def filter_tasks(self, date=None, day_offset=None, user=None, only_onsite=False):
+    def filter_tasks(self, date=None, day_offset=None,
+                     user=None, only_onsite=False):
         self.get_tasks_if_necessary()
-        if date == None and day_offset != None:
+        if date is None and day_offset is not None:
             date = DateUtils.from_date_offset(self.start_date, day_offset)
 
         def filter_task(task):
-            if user != None and task.user != user:
+            if user is not None and task.user != user:
                 return False
-            if date != None and task.date != date:
+            if date is not None and task.date != date:
                 return False
             if only_onsite and not(task.onsite):
                 return False
@@ -128,22 +133,29 @@ class PeriodOfWork(object):
         return list(filter(filter_task, self.tasks))
 
     def get_all_dates(self):
-        return [DateUtils.from_date_offset(self.start_date, offset) for offset in range(0, self.num_days)]
+        return [DateUtils.from_date_offset(self.start_date, offset)
+                for offset in range(0, self.num_days)]
 
-    def time_worked(self, date=None, day_offset=None, user=None, only_onsite=False):
-        return sum([task.length() for task in self.filter_tasks(date, day_offset, user, only_onsite)], datetime.timedelta())
+    def time_worked(self, date=None, day_offset=None,
+                    user=None, only_onsite=False):
+        return sum([task.length() for task in
+                    self.filter_tasks(date, day_offset, user, only_onsite)],
+                   datetime.timedelta())
 
     @staticmethod
     def fetch_tasks_for_all(periods):
-        tasks = PHPReport.get_tasks_for_task_filters([period.filter for period in periods])
+        filters = [period.filter for period in periods]
+        tasks = PHPReport.get_tasks_for_task_filters(filters)
         for pair in zip(periods, tasks):
             pair[0].set_tasks(pair[1])
+
 
 class WeekOfWork(PeriodOfWork):
     def __init__(self, year, week, filter=TaskFilter(), tasks=None):
         self.week = week
         self.year = year
-        super(WeekOfWork, self).__init__(DateUtils.from_week_number(year, week), 7, filter, tasks)
+        date = DateUtils.from_week_number(year, week)
+        super(WeekOfWork, self).__init__(date, 7, filter, tasks)
 
     def __str__(self):
         return "Week %i of %i" % (self.week, self.year)
@@ -159,13 +171,13 @@ class WeekOfWork(PeriodOfWork):
         default_year = datetime.datetime.today().year
 
         def split_single(string):
-            if not '/' in string:
+            if '/' not in string:
                 return default_year, int(string.strip())
             else:
                 week, year = string.split('/')
                 return int(year.strip()), int(week.strip())
 
-        if not "-" in string and not "," in string:
+        if "-" not in string and "," not in string:
             split = split_single(string)
             return [cls(split[0], split[1], filter)]
 
@@ -202,9 +214,10 @@ class WeekOfWork(PeriodOfWork):
             if task.date > last_date:
                 last_date = task.date
 
-        week_dates = DateUtils.get_weeks_in_date_range(first_date, last_date)
+        week_dates = DateUtils.get_weeks_in_date_range(first_date,
+                                                       last_date)
         weeks = [cls(*DateUtils.week_number(date), filter=filter, tasks=[]) for date in week_dates]
-        weeks_dict = {"{0}-{1}".format(week.year, week.week):week for week in weeks}
+        weeks_dict = {"{0}-{1}".format(week.year, week.week): week for week in weeks}
 
         for task in tasks:
             (year, week) = task.date.isocalendar()[:2]
@@ -212,10 +225,12 @@ class WeekOfWork(PeriodOfWork):
 
         return weeks
 
+
 class Report(object):
     def __init__(self, header, wiki_string):
         self.header = header
         self.wiki_string = wiki_string
+
 
 class AggregateReport(Report):
     def __init__(self, time_periods, formatter, header, wiki_string):
@@ -230,7 +245,8 @@ class AggregateReport(Report):
 
         hours_worked_string = DateUtils.format_delta(amount)
         if amount_onsite:
-            hours_worked_string += " (%s onsite)" % DateUtils.format_delta(amount_onsite)
+            hours_worked_string += " (%s onsite)" % \
+                    DateUtils.format_delta(amount_onsite)
 
         table_contents.append([period.short_string(), hours_worked_string])
         return (amount, amount_onsite)
@@ -248,9 +264,12 @@ class AggregateReport(Report):
 
         self.formatter.generate_table(table_contents, has_headers=False)
 
-        self.formatter.generate_header("Total hours worked: %s" % DateUtils.format_delta(total))
-        self.formatter.generate_header("Total onsite hours worked: %s" % DateUtils.format_delta(total_onsite))
+        self.formatter.generate_header(
+            "Total hours worked: %s" % DateUtils.format_delta(total))
+        self.formatter.generate_header(
+            "Total onsite hours worked: %s" % DateUtils.format_delta(total_onsite))
         return self.formatter.flatten()
+
 
 class DetailedReport(Report):
     def __init__(self, time_period, parent, formatter):
@@ -281,11 +300,11 @@ class DetailedReport(Report):
         table = []
         table.append([""] + list(map(DetailedReport.format_date, self.time_period.get_all_dates())) + ["Total"])
         for user in sorted(self.time_period.get_users()):
-            table.append([user.login] + \
-                         self.time_worked(user=user) + \
+            table.append([user.login] +
+                         self.time_worked(user=user) +
                          self.time_worked(user=user, total=True))
-        table.append(["everyone"] + \
-                     self.time_worked() + \
+        table.append(["everyone"] +
+                     self.time_worked() +
                      self.time_worked(total=True))
         self.formatter.generate_table(table)
 
@@ -329,7 +348,7 @@ class TextFormatter(object):
 
     @staticmethod
     def generate_column_length_list(table):
-        lengths = [list(map(len, x)) for x in table] # Generate a table of lengths.
+        lengths = [list(map(len, x)) for x in table]  # Generate a table of lengths.
         # Turn the table of lengths into a row of max lengths for each column.
         return list(map(max, list(zip(*lengths))))
 
@@ -346,11 +365,11 @@ class TextFormatter(object):
         first_column_size = max([len(content[0]) for content in contents])
         format_string = "%%%i.%is: %%s\n" % (first_column_size, first_column_size)
 
-        indent = (first_column_size + 2) * ' ' # Enough to account for the day name offset.
+        indent = (first_column_size + 2) * ' '  # Enough to account for the day name offset.
         width = 80 - len(indent)
         for content in contents:
             second_column = textwrap.fill(content[1],
-                                          break_long_words=False, # Don't break URLs.
+                                          break_long_words=False,  # Don't break URLs.
                                           width=width,
                                           initial_indent=indent,
                                           subsequent_indent=indent).strip()
@@ -367,6 +386,7 @@ class TextFormatter(object):
 
     def flatten(self):
         return "".join(self.pieces)
+
 
 class TwikiFormatter(TextFormatter):
     def generate_table_row(self, columns, lengths=None, header=False, highlight_first=True):
@@ -410,12 +430,14 @@ class TwikiFormatter(TextFormatter):
         for content in contents:
             self.pieces.append("   * *%s* - %s\n" % (content[0], content[1]))
 
+
 def send_url_request(request):
     try:
         urllib.request.urlopen(request)
     except Exception as e:
         print(e)
         print("Could not complete upload to TWiki at %s" % request.get_full_url())
+
 
 class TwikiUploader(object):
     def __init__(self, url, section="Main", username=None, password=None):
@@ -451,12 +473,13 @@ class TwikiUploader(object):
         request = urllib.request.Request(full_save_url)
 
         contents = self.add_links_for_short_strings(report.generate_report(), all_reports)
-        request_data = { 'text': contents.encode('latin1') }
+        request_data = {'text': contents.encode('latin1')}
         if report.parent:
             request_data['topicparent'] = report.parent.wiki_string
 
         request.data = urllib.parse.urlencode(request_data).encode('latin1')
         return request
+
 
 def choose_from_list(items):
     assert(len(items) > 1)
@@ -475,6 +498,7 @@ def choose_from_list(items):
 
         print("Not a valid index. Type a number between 0 and {0} and press enter.".format(len(items) - 1))
 
+
 def create_task_filter_from_args(args):
     customer = None
     project = None
@@ -482,6 +506,7 @@ def create_task_filter_from_args(args):
 
     def filter_instances(instances, search_string):
         terms = search_string.lower().split(',')
+
         def matches_all(instance):
             for term in terms:
                 if not instance.match(term):
@@ -491,7 +516,7 @@ def create_task_filter_from_args(args):
 
     # FIXME: We should really support choosing selecting more than one
     # customer or project.
-    if args.project != None:
+    if args.project is not None:
         projects = filter_instances(list(Project.instances.values()), args.project)
         if not len(projects):
             print("Could not find any projects matching '%s'" % args.project)
@@ -502,7 +527,7 @@ def create_task_filter_from_args(args):
         else:
             project = projects[0]
 
-    if args.customer != None:
+    if args.customer is not None:
         customers = filter_instances(list(Customer.instances.values()), args.customer)
         if not len(customers):
             print("Could not find any customers matching '%s'" % args.customer)
@@ -512,8 +537,8 @@ def create_task_filter_from_args(args):
         else:
             customer = customers[0]
 
-    if args.user != None:
-        users = [user for user in list(User.instances.values()) if user.login == args.user]
+    if args.user is not None:
+        users = [x for x in list(User.instances.values()) if x.login == args.user]
         if not len(users):
             print("Could not find any users matching '%s'" % args.user)
             sys.exit(1)
@@ -563,13 +588,13 @@ class ReportCreator(object):
 
         elif self.mode == ReportCreator.Mode.Aggregate:
             return AggregateReport(self.time_periods, self.formatter(),
-                                   "%s to %s for %s" % \
-                                       (self.time_periods[0],
-                                        self.time_periods[-1],
-                                        self.time_periods[0].filter),
-                                   "%sTo%s" % \
-                                       (self.time_periods[0].wiki_string(),
-                                        self.time_periods[-1].wiki_string()))
+                                   "%s to %s for %s" %
+                                   (self.time_periods[0],
+                                    self.time_periods[-1],
+                                    self.time_periods[0].filter),
+                                   "%sTo%s" %
+                                   (self.time_periods[0].wiki_string(),
+                                    self.time_periods[-1].wiki_string()))
         else:
             return None
 
@@ -635,4 +660,3 @@ if __name__ == '__main__':
     report_creator = ReportCreator(args, create_task_filter_from_args(args))
     report_creator.create_reports()
     report_creator.output_reports()
-
