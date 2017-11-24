@@ -168,11 +168,11 @@ class WeekOfWork(PeriodOfWork):
 
     @classmethod
     def create_from_string(cls, string, filter):
-        default_year = datetime.datetime.today().year
+        today = datetime.datetime.today()
 
         def split_single(string):
             if '/' not in string:
-                return default_year, int(string.strip())
+                return today.year, int(string.strip())
             else:
                 week, year = string.split('/')
                 return int(year.strip()), int(week.strip())
@@ -185,12 +185,16 @@ class WeekOfWork(PeriodOfWork):
         for week_range in string.split(","):
             range_bounds = week_range.split("-")
 
-            if len(range_bounds) == 1:
+            if '-' not in week_range:
                 start = end = result.append(split_single(range_bounds))
             else:
                 # FIXME: We don't yet support spanning a year.
+                range_bounds = week_range.split("-")
                 start = split_single(range_bounds[0])
-                end = split_single(range_bounds[1])
+                if len(range_bounds) == 1 or not range_bounds[1]:
+                    end = today.isocalendar()[:2]
+                else:
+                    end = split_single(range_bounds[1])
 
             for week in range(start[1], end[1] + 1):
                 result.append(cls(start[0], week, filter))
