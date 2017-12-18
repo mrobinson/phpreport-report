@@ -340,8 +340,15 @@ class DetailedReport(Report):
             self.formatter.generate_large_text("Onsite hours worked: %s" % DateUtils.format_delta(onsite_time))
 
     def get_stories_for_day_and_user(self, user, date):
+        def story_text(task):
+            text = " (" + DateUtils.format_delta(task.length())
+            if task.story:
+                text += " " + task.story
+            text += ")"
+            return text
+
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
-        all_stories = " ".join([task.text + " (" + DateUtils.format_delta(task.length()) + " " + task.story + ")" + self.EOS for task in tasks_for_day])
+        all_stories = " ".join([task.text + story_text(task) + self.EOS for task in tasks_for_day])
 
         # Strip out duplicated whitespace
         return re.compile(r'\s+').sub(' ', all_stories).strip()
