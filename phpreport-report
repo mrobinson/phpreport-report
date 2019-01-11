@@ -318,7 +318,14 @@ class DetailedReport(Report):
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
-        all_stories = " ".join([task.text + " " + task.story for task in tasks_for_day])
+
+        def story_in_brackets(story):
+            if story:
+                return "[{}]".format(story)
+            else:
+                return ""
+
+        all_stories = " ".join([story_in_brackets(task.story) + " " + task.text for task in tasks_for_day])
 
         # Strip out duplicated whitespace
         return re.compile(r'\s+').sub(' ', all_stories).strip()
