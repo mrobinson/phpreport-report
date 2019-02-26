@@ -276,7 +276,7 @@ class AggregateReport(Report):
 
 
 class DetailedReport(Report):
-    def __init__(self, time_period, parent, formatter):
+    def __init__(self, time_period, parent, formatter, include_story=True):
         if parent:
             header = "{0} for {1}".format(time_period, parent.header)
             wiki_string = "{0}-{1}".format(parent.wiki_string, time_period.wiki_string())
@@ -289,6 +289,7 @@ class DetailedReport(Report):
         self.time_period = time_period
         self.formatter = formatter
         self.parent = parent
+        self.include_story = include_story
 
     @staticmethod
     def format_date(date):
@@ -319,7 +320,15 @@ class DetailedReport(Report):
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
 
-        all_stories = [self.formatter.format_story(task.story) + " " + task.text for task in tasks_for_day]
+        def get_story(task):
+            s = ""
+            if self.include_story:
+                s += self.formatter.format_story(task.story)
+            if s:
+                s += " "
+            return s
+
+        all_stories = [get_story(task) + task.text for task in tasks_for_day]
 
         # Many times people add a lot of duplicate descriptions. Just output one of each.
         all_stories = set(all_stories)
@@ -618,7 +627,8 @@ class ReportCreator(object):
         for period in self.time_periods:
             self.reports.append(DetailedReport(time_period=period,
                                                parent=self.parent_report,
-                                               formatter=self.formatter()))
+                                               formatter=self.formatter(),
+                                               include_story=args.story))
 
     def output_report_list(self, report_list):
         if args.twiki:
@@ -659,6 +669,8 @@ if __name__ == '__main__':
                         default="text", help="output format for report")
     parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
                         help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
+    parser.add_argument('--no-story', action='store_false', dest='story',
+                        help="Do not include the story tag in the output")
     args = parser.parse_args()
 
     if not args.project and not args.customer and not args.user:
