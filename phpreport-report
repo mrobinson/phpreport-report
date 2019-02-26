@@ -319,13 +319,7 @@ class DetailedReport(Report):
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)
 
-        def story_in_brackets(story):
-            if story:
-                return "[{}]".format(story)
-            else:
-                return ""
-
-        all_stories = [story_in_brackets(task.story) + " " + task.text for task in tasks_for_day]
+        all_stories = [self.formatter.format_story(task.story) + " " + task.text for task in tasks_for_day]
 
         # Many times people add a lot of duplicate descriptions. Just output one of each.
         all_stories = set(all_stories)
@@ -397,6 +391,12 @@ class TextFormatter(object):
 
     def generate_large_text(self, text):
         self.pieces.append("%s\n" % text)
+
+    def format_story(self, story):
+            if story:
+                return "[{}]".format(story)
+            else:
+                return ""
 
     def flatten(self):
         return "".join(self.pieces)
