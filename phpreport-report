@@ -454,6 +454,27 @@ class TwikiFormatter(TextFormatter):
             self.pieces.append("   * *%s* - %s\n" % (content[0], content[1]))
 
 
+class MarkdownFormatter(TextFormatter):
+    def generate_table(self, table, has_headers=True):
+        return ""
+
+    def generate_header(self, header):
+        self.pieces.append("\n# %s\n" % header)
+
+    def generate_section_header(self, header):
+        self.pieces.append("\n## %s\n" % header)
+
+    def generate_aligned_list(self, contents):
+        self.pieces.append("\n")
+        for content in contents:
+            self.pieces.append(" * **%s** %s\n" % (content[0], content[1]))
+
+    def format_story(self, story):
+        if story:
+            return "*{}*".format(story)
+        return ""
+
+
 def send_url_request(request):
     try:
         urllib.request.urlopen(request)
@@ -599,6 +620,8 @@ class ReportCreator(object):
     def formatter(self):
         if self.args.formatter == "twiki" or args.twiki:
             return TwikiFormatter()
+        elif self.args.formatter == "markdown":
+            return MarkdownFormatter()
         else:
             return TextFormatter()
 
@@ -665,7 +688,7 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--week', type=str,
                         default=None,
                         help="Week or week range of tasks to show. A year can optionally be specified using the syntax <week>/<year>.")
-    parser.add_argument('-f', '--formatter', choices=['text', 'twiki'],
+    parser.add_argument('-f', '--formatter', choices=['text', 'twiki', 'markdown'],
                         default="text", help="output format for report")
     parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
                         help="Use TWiki mode, which uploads both detailed and aggregate reports to the given TWiki URL.")
