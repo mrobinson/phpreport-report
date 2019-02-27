@@ -33,6 +33,7 @@ from phpreport import TaskFilter
 import argparse
 import datetime
 import multiprocessing
+import os
 import re
 import textwrap
 import sys
@@ -330,11 +331,20 @@ class DetailedReport(Report):
 
         all_stories = [get_story(task) + task.text for task in tasks_for_day]
 
-        # Many times people add a lot of duplicate descriptions. Just output one of each.
-        all_stories = set(all_stories)
+        # Many times people add a lot of duplicate descriptions. Just output
+        # one of each, keeping the stories ordering
+        all_stories = list(dict.fromkeys(all_stories))
 
         # Strip out duplicated whitespace
-        return re.compile(r'\s+').sub(' ', " ".join(all_stories)).strip()
+        def strip_whitespace(line):
+            return re.compile(r'\s+').sub(' ', line)
+        stripped_stories = []
+        for story in all_stories:
+          stripped = [strip_whitespace(line) for line in story.splitlines()
+                                             if line.strip() != '']
+          stripped_stories.append(os.linesep.join(stripped))
+
+        return os.linesep.join(stripped_stories)
 
     def generate_stories_for_user(self, user):
         self.formatter.generate_section_header("Stories for %s" % user.login)
@@ -385,11 +395,14 @@ class TextFormatter(object):
         indent = (first_column_size + 2) * ' '  # Enough to account for the day name offset.
         width = 80 - len(indent)
         for content in contents:
-            second_column = textwrap.fill(content[1],
-                                          break_long_words=False,  # Don't break URLs.
-                                          width=width,
-                                          initial_indent=indent,
-                                          subsequent_indent=indent).strip()
+            second_column = os.linesep.join(
+                [textwrap.fill(line,
+                               break_long_words=False,   # Don't break URLs.
+                               replace_whitespace=False, # Already done. Don't remove newlines
+                               width=width,
+                               initial_indent=indent,
+                               subsequent_indent=indent)
+                 for line in content[1].splitlines()]).strip()
             self.pieces.append(format_string % (content[0], second_column))
 
     def generate_header(self, header):
