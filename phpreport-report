@@ -23,6 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from dateutils import DateUtils
 from phpreport import Credential
 from phpreport import Customer
 from phpreport import Project
@@ -39,54 +40,6 @@ import sys
 import urllib.request
 import urllib.parse
 import urllib.error
-
-
-class DateUtils(datetime.date):
-    @staticmethod
-    def from_week_number(year, week):
-        week_as_string = "%i %i 1" % (year, week)
-        date = datetime.datetime.strptime(week_as_string, "%Y %W %w").date()
-
-        # ISO8601 considers the first week of the year the first one that
-        # contains a Thursday, but strptime does not. We need to account
-        # for that.
-        if datetime.date(year, 1, 4).isoweekday() > 4:
-            date -= datetime.timedelta(days=7)
-
-        return date
-
-    @staticmethod
-    def from_date_offset(date, day_offset):
-        return date + datetime.timedelta(day_offset)
-
-    @staticmethod
-    def week_number(date):
-        return date.isocalendar()[:2]
-
-    @classmethod
-    def monday(cls, date):
-        return cls.from_week_number(*cls.week_number(date))
-
-    @classmethod
-    def next_week(cls, date):
-        return cls.from_date_offset(date, 7)
-
-    @classmethod
-    def get_weeks_in_date_range(cls, start, end):
-        week = start = cls.monday(start)
-        end = cls.monday(end)
-
-        weeks = []
-        while week <= end:
-            weeks.append(week)
-            week = cls.next_week(week)
-        return weeks
-
-    @staticmethod
-    def format_delta(delta):
-        hours = (delta.days * 24) + (delta.seconds // 3600)
-        seconds = (delta.seconds // 60) % 60
-        return "%02i:%02i" % (hours, seconds)
 
 
 class PeriodOfWork(object):
@@ -125,7 +78,7 @@ class PeriodOfWork(object):
         def filter_task(task):
             if user is not None and task.user != user:
                 return False
-            if date is not None and task.date != date:
+            if date is not None and not DateUtils.same_date(task.date, date):
                 return False
             if only_onsite and not(task.onsite):
                 return False
@@ -161,46 +114,27 @@ class WeekOfWork(PeriodOfWork):
         return "Week %i of %i" % (self.week, self.year)
 
     def short_string(self):
-        return "Week %i" % self.week
+        return "Week {}/{} ".format(self.week, self.year)
 
     def wiki_string(self):
         return "Week%i-%i" % (self.week, self.year)
 
     @classmethod
+    def create_array_of_weeks_between_dates(cls, start, end, filter):
+        week_dates = DateUtils.get_weeks_in_date_range(start, end)
+        weeks = [cls(*DateUtils.year_and_week_number(week_date),
+                     filter=filter, tasks=[]) for week_date in week_dates]
+        return weeks
+
+    @classmethod
     def create_from_string(cls, string, filter):
-        today = datetime.datetime.today()
+        dates = DateUtils.date_range_from_string(string)
+        weeks = cls.create_array_of_weeks_between_dates(dates[0], dates[1],
+                                                        filter)
 
-        def split_single(string):
-            if '/' not in string:
-                return today.year, int(string.strip())
-            else:
-                week, year = string.split('/')
-                return int(year.strip()), int(week.strip())
+        cls.fetch_tasks_for_all(weeks)
 
-        if "-" not in string and "," not in string:
-            split = split_single(string)
-            return [cls(split[0], split[1], filter)]
-
-        result = []
-        for week_range in string.split(","):
-            range_bounds = week_range.split("-")
-
-            if '-' not in week_range:
-                start = end = result.append(split_single(range_bounds))
-            else:
-                # FIXME: We don't yet support spanning a year.
-                range_bounds = week_range.split("-")
-                start = split_single(range_bounds[0])
-                if len(range_bounds) == 1 or not range_bounds[1]:
-                    end = today.isocalendar()[:2]
-                else:
-                    end = split_single(range_bounds[1])
-
-            for week in range(start[1], end[1] + 1):
-                result.append(cls(start[0], week, filter))
-
-        cls.fetch_tasks_for_all(result)
-        return result
+        return weeks
 
     @classmethod
     def create_for_entire_project(cls, filter):
@@ -218,11 +152,10 @@ class WeekOfWork(PeriodOfWork):
             if task.date > last_date:
                 last_date = task.date
 
-        week_dates = DateUtils.get_weeks_in_date_range(first_date,
-                                                       last_date)
-        weeks = [cls(*DateUtils.week_number(date), filter=filter, tasks=[]) for date in week_dates]
-        weeks_dict = {"{0}-{1}".format(week.year, week.week): week for week in weeks}
+        weeks = cls.create_array_of_weeks_between_dates(first_date, last_date,
+                                                        filter)
 
+        weeks_dict = {"{0}-{1}".format(week.year, week.week): week for week in weeks}
         for task in tasks:
             (year, week) = task.date.isocalendar()[:2]
             weeks_dict['{0}-{1}'.format(year, week)].add_task(task)
@@ -603,12 +536,12 @@ class ReportCreator(object):
         self.task_filter = task_filter
 
         # This may actually fetch the tasks as a side-effect.
-        if not args.week:
+        if not args.time:
             self.time_periods = WeekOfWork.create_for_entire_project(task_filter)
             self.mode = ReportCreator.Mode.Project
 
-        elif args.week:
-            self.time_periods = WeekOfWork.create_from_string(args.week, task_filter)
+        elif args.time:
+            self.time_periods = WeekOfWork.create_from_string(args.time, task_filter)
             if len(self.time_periods) > 1:
                 self.mode = ReportCreator.Mode.Aggregate
             else:
@@ -676,6 +609,7 @@ class ReportCreator(object):
 
 
 if __name__ == '__main__':
+    time_range_help = ""
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--login', type=str,
                         help="login name for PHPReport and TWiki")
@@ -685,9 +619,12 @@ if __name__ == '__main__':
                         help="only consider tasks matching given customer search string")
     parser.add_argument('-u', '--user', type=str,
                         help="only consider tasks logged by the given user")
-    parser.add_argument('-w', '--week', type=str,
-                        default=None,
-                        help="Week or week range of tasks to show. A year can optionally be specified using the syntax <week>/<year>.")
+
+    # TODO: -w and --week are maintained for backward compatibility. Eventually
+    # we should just remove them.
+    parser.add_argument('-t', '--time', '-w', '--week', type=str, default=None,
+                        help="Time range to use for the report. Can be a single time or a range.")
+
     parser.add_argument('-f', '--formatter', choices=['text', 'twiki', 'markdown'],
                         default="text", help="output format for report")
     parser.add_argument('--twiki', metavar="TWIKI_URL", type=str,
@@ -700,8 +637,8 @@ if __name__ == '__main__':
         print("Must give either a customer (-c) search string or a product search string (-p)")
         sys.exit(1)
 
-    if not args.week and not args.project:
-        print("Must give either a project (-p) or a week range (-w)")
+    if not args.time and not args.project:
+        print("Must give either a project (-p) or a time range (-t)")
         sys.exit(1)
 
     PHPReport.login(username=args.login)

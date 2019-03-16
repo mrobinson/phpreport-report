@@ -309,11 +309,6 @@ class PHPReport(object):
         responses = fetch_urls_in_parallel([task_filter.to_url(cls) for task_filter in task_filters])
         return [cls.create_objects_from_response(x, Task, "task") for x in responses]
 
-    @classmethod
-    def get_tasks_for_day_and_user(cls, date, user):
-        response = cls.get_contents_of_url("%s/getUserTasksService.php?sid=%s&login=%s&date=%s&dateFormat=Y-m-d" %
-                                           (cls.address, cls.session_id, user.login, str(date)))
-        return cls.create_objects_from_response(response, Task, "task")
 
 
 class TaskFilter(object):
@@ -345,9 +340,9 @@ class TaskFilter(TaskFilter):
         url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
               (phpreport.address, phpreport.session_id)
         if self.start_date:
-            url += "&filterStartDate=%s" % str(self.start_date)
+            url += "&filterStartDate=%s" % self.start_date.strftime("%Y-%m-%d")
         if self.end_date:
-            url += "&filterEndDate=%s" % str(self.end_date)
+            url += "&filterEndDate=%s" % self.end_date.strftime("%Y-%m-%d")
         if self.project is not None:
             url += "&projectId=%i" % self.project.id
         if self.customer is not None:
