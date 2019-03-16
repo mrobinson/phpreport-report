@@ -3,8 +3,8 @@
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
 #    and/or other materials provided with the distribution.
@@ -21,22 +21,23 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import multiprocessing
+import sys
+import urllib
+from xml.etree import ElementTree
+
 import base64
 import datetime
 import getpass
 import http.client
 import keyring
-import multiprocessing
-import sys
-import urllib
-import xml.etree.ElementTree as ElementTree
 
 DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
 http.client.HTTPConnection.debuglevel = 0
 
 
-class Credential(object):
+class Credential():
     all_credentials = {}
     password_manager = None
 
@@ -87,10 +88,10 @@ class Credential(object):
         return self.url == other.url and self.username == other.username
 
 
-class PHPReportObject(object):
+class PHPReportObject():
     @classmethod
-    def find(cls, id):
-        return cls.instances[id]
+    def find(cls, phpreport_id):
+        return cls.instances[phpreport_id]
 
     @classmethod
     def load_all(cls, data, tag):
@@ -98,7 +99,7 @@ class PHPReportObject(object):
 
         cls.instances = {}
         for instance in instances:
-            cls.instances[instance.id] = instance
+            cls.instances[instance.phpreport_id] = instance
 
     @staticmethod
     def id_string_to_integer(string):
@@ -108,6 +109,7 @@ class PHPReportObject(object):
 
 
 class Task(PHPReportObject):
+    # pylint: disable=too-many-instance-attributes,too-many-branches
     def __init__(self, task_xml):
         self.text = ""
         self.story = ""
@@ -120,7 +122,7 @@ class Task(PHPReportObject):
 
         for child in task_xml.getchildren():
             if child.tag == "id":
-                self.id = int(child.text)
+                self.phpreport_id = int(child.text)
             elif child.tag == "ttype":
                 self.type = child.text
             elif child.tag == "date":
@@ -168,7 +170,7 @@ class Project(PHPReportObject):
 
         for child in project_xml.getchildren():
             if child.tag == "id":
-                self.id = int(child.text)
+                self.phpreport_id = int(child.text)
             if child.tag == "description":
                 self.description = child.text
             if child.tag == "initDate" and child.text:
@@ -183,7 +185,7 @@ class Project(PHPReportObject):
         return self.description.lower().find(term) != -1
 
     def has_ended(self):
-        return self.end_date and self.end_date() < datetime.date.today()
+        return self.end_date and self.end_date < datetime.date.today()
 
     def __lt__(self, other):
         if self.has_ended() and not other.has_ended():
@@ -192,14 +194,14 @@ class Project(PHPReportObject):
             return False
         if self.init_date and other.init_date:
             return self.init_date < other.init_date
-        return self.id < other.id
+        return self.phpreport_id < other.phpreport_id
 
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
         for child in user_xml.getchildren():
             if child.tag == "id":
-                self.id = int(child.text)
+                self.phpreport_id = int(child.text)
             if child.tag == "login":
                 self.login = child.text
 
@@ -217,7 +219,7 @@ class Customer(PHPReportObject):
     def __init__(self, customer_xml):
         for child in customer_xml.getchildren():
             if child.tag == "id":
-                self.id = int(child.text)
+                self.phpreport_id = int(child.text)
             if child.tag == "name":
                 self.name = child.text
 
@@ -237,7 +239,7 @@ def fetch_urls_in_parallel(urls):
     return pool.map(get_url_contents, urls)
 
 
-class PHPReport(object):
+class PHPReport():
     users = {}
     projects = {}
     customers = {}
@@ -247,22 +249,22 @@ class PHPReport(object):
         def sanitize_url_for_display(url):
             return url.replace(cls.credential.password, "<<<your password>>>")
 
-        r = urllib.request.Request(url, None)
+        request = urllib.request.Request(url, None)
         try:
-            return urllib.request.urlopen(r).read()
-        except Exception:
+            return urllib.request.urlopen(request).read()
+        except urllib.error.URLError:
             print("Could not complete request to %s" % sanitize_url_for_display(url))
             sys.exit(1)
 
     @classmethod
     def send_login_request(cls, address, username, password):
         url = "%s/loginService.php" % address
-        r = urllib.request.Request(url, None)
+        request = urllib.request.Request(url, None)
         auth_string = bytes('%s:%s' % (username, password), 'UTF-8')
-        r.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
+        request.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
         try:
-            return urllib.request.urlopen(r).read()
-        except Exception:
+            return urllib.request.urlopen(request).read()
+        except urllib.error.URLError:
             print("Could not complete login request to %s" % url)
             sys.exit(1)
 
@@ -278,11 +280,11 @@ class PHPReport(object):
 
         cls.session_id = None
         tree = ElementTree.fromstring(response)
-        for child in tree.getchildren():
+        for child in tree:
             if child.tag == "sessionId":
                 cls.session_id = child.text
 
-        if not(cls.session_id):
+        if not cls.session_id:
             print("Could not find session id in login response, password likely incorrect: %s" % response)
             sys.exit(1)
 
@@ -301,7 +303,7 @@ class PHPReport(object):
 
     @staticmethod
     def create_objects_from_response(response, cls, tag):
-        return [cls(child) for child in ElementTree.fromstring(response).getchildren() if child.tag == tag]
+        return [cls(child) for child in ElementTree.fromstring(response) if child.tag == tag]
 
     @classmethod
     def get_tasks_for_task_filters(cls, task_filters):
@@ -311,7 +313,7 @@ class PHPReport(object):
 
 
 
-class TaskFilter(object):
+class TaskFilter():
     def __init__(self, project=None, customer=None, user=None):
         self.project = project
         self.customer = customer
@@ -335,7 +337,6 @@ class TaskFilter(object):
         return task_filter
 
 
-class TaskFilter(TaskFilter):
     def to_url(self, phpreport):
         url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
               (phpreport.address, phpreport.session_id)
@@ -344,9 +345,9 @@ class TaskFilter(TaskFilter):
         if self.end_date:
             url += "&filterEndDate=%s" % self.end_date.strftime("%Y-%m-%d")
         if self.project is not None:
-            url += "&projectId=%i" % self.project.id
+            url += "&projectId=%i" % self.project.phpreport_id
         if self.customer is not None:
-            url += "&customerId=%i" % self.customer.id
+            url += "&customerId=%i" % self.customer.phpreport_id
         if self.user is not None:
-            url += "&userId=%i" % self.user.id
+            url += "&userId=%i" % self.user.phpreport_id
         return url

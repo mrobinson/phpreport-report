@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 # Copyright (C) 2019 Igalia S.L.
 #
 # Redistribution and use in source and binary forms, with or without

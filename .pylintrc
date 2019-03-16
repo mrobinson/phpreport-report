@@ -1,0 +1,4 @@
+[MESSAGES CONTROL]
+disable=locally-disabled,missing-docstring,E501
+max-line-length=120
+
