@@ -56,12 +56,7 @@ class PeriodOfWork():
             DateUtils.from_date_offset(self.start_date, num_days - 1))
 
     def get_users(self):
-        self.get_tasks_if_necessary()
         return self.users
-
-    def get_tasks_if_necessary(self):
-        if self.tasks is None:
-            PeriodOfWork.fetch_tasks_for_all([self])
 
     def set_tasks(self, tasks):
         self.tasks = []
@@ -72,9 +67,18 @@ class PeriodOfWork():
         self.tasks.append(task)
         self.users.add(task.user)
 
+    def add_task_if_starts_in_period(self, task):
+        ending_date = DateUtils.from_date_offset(self.start_date, self.num_days)
+        task_start = datetime.datetime.combine(task.date, datetime.datetime.min.time())
+        if task_start < self.start_date:
+            return False
+        if task_start >= ending_date:
+            return False
+        self.add_task(task)
+        return True
+
     def filter_tasks(self, date=None, day_offset=None,
                      user=None, only_onsite=False):
-        self.get_tasks_if_necessary()
         if date is None and day_offset is not None:
             date = DateUtils.from_date_offset(self.start_date, day_offset)
 
@@ -158,10 +162,14 @@ class WeekOfWork(PeriodOfWork):
         weeks = cls.create_array_of_weeks_between_dates(first_date, last_date,
                                                         task_filter)
 
-        weeks_dict = {"{0}-{1}".format(week.year, week.week): week for week in weeks}
+        def add_task_to_weeks(task):
+            for week in weeks:
+                if week.add_task_if_starts_in_period(task):
+                    return
+            raise Exception("Could not assign task to week.")
+
         for task in tasks:
-            (year, week) = task.date.isocalendar()[:2]
-            weeks_dict['{0}-{1}'.format(year, week)].add_task(task)
+            add_task_to_weeks(task)
 
         return weeks
 
@@ -536,7 +544,6 @@ class ReportCreator():
         self.args = args
         self.task_filter = task_filter
 
-        # This may actually fetch the tasks as a side-effect.
         if not args.time:
             self.time_periods = WeekOfWork.create_for_entire_project(task_filter)
             self.mode = ReportCreator.Mode.PROJECT
