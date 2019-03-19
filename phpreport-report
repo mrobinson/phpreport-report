@@ -51,7 +51,7 @@ class PeriodOfWork():
         self.num_days = num_days
         self.users = set()
         self.tasks = tasks
-        self.task_filter = task_filter.create_instance_for_dates(
+        self.task_filter = task_filter.create_same_filter_with_different_dates(
             self.start_date,
             DateUtils.from_date_offset(self.start_date, num_days - 1))
 
@@ -187,10 +187,10 @@ class AggregateReport():
         amount = period.time_worked()
         amount_onsite = period.time_worked(only_onsite=True)
 
-        hours_worked_string = DateUtils.format_delta(amount)
+        hours_worked_string = DateUtils.format_delta_as_hours(amount)
         if amount_onsite:
             hours_worked_string += " (%s onsite)" % \
-                    DateUtils.format_delta(amount_onsite)
+                    DateUtils.format_delta_as_hours(amount_onsite)
 
         table_contents.append([period.short_string(), hours_worked_string])
         return (amount, amount_onsite)
@@ -209,9 +209,9 @@ class AggregateReport():
         self.formatter.generate_table(table_contents, has_headers=False)
 
         self.formatter.generate_header(
-            "Total hours worked: %s" % DateUtils.format_delta(total))
+            "Total hours worked: %s" % DateUtils.format_delta_as_hours(total))
         self.formatter.generate_header(
-            "Total onsite hours worked: %s" % DateUtils.format_delta(total_onsite))
+            "Total onsite hours worked: %s" % DateUtils.format_delta_as_hours(total_onsite))
         return self.formatter.flatten()
 
 
@@ -238,9 +238,9 @@ class DetailedReport():
 
     def time_worked(self, user=None, total=False):
         if total:
-            return [DateUtils.format_delta(self.time_period.time_worked(user=user))]
+            return [DateUtils.format_delta_as_hours(self.time_period.time_worked(user=user))]
         all_dates = self.time_period.get_all_dates()
-        return [DateUtils.format_delta(self.time_period.time_worked(date=x, user=user)) for x in all_dates]
+        return [DateUtils.format_delta_as_hours(self.time_period.time_worked(date=x, user=user)) for x in all_dates]
 
     def generate_hours(self):
         table = []
@@ -256,7 +256,7 @@ class DetailedReport():
 
         onsite_time = self.time_period.time_worked(only_onsite=True)
         if onsite_time > datetime.timedelta(0):
-            self.formatter.generate_large_text("Onsite hours worked: %s" % DateUtils.format_delta(onsite_time))
+            self.formatter.generate_large_text("Onsite hours worked: %s" % DateUtils.format_delta_as_hours(onsite_time))
 
     def get_stories_for_day_and_user(self, user, date):
         tasks_for_day = self.time_period.filter_tasks(date=date, user=user)

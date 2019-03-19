@@ -33,7 +33,7 @@ HALF_REGEX = re.compile(r"^h([1,2])/(\d\d\d\d)$", re.IGNORECASE)
 YEAR_REGEX = re.compile(r"^(\d\d\d\d)$")
 
 
-class DateUtils(datetime.date):
+class DateUtils():
     @staticmethod
     def last_day_of_month(year, month):
         return calendar.monthrange(year, month)[1]
@@ -55,33 +55,31 @@ class DateUtils(datetime.date):
         if end:
             date += datetime.timedelta(days=6)
 
-        # We clear any time component here so that we return a standard date.
-        return datetime.datetime(date.year, date.month, date.day)
+        return date
 
     @staticmethod
     def from_quarter_number(year, quarter, end=False):
         if end:
             month = (quarter * 3)
-            return datetime.datetime(year, month,
-                                     DateUtils.last_day_of_month(year, month))
+            return datetime.date(year, month,
+                                 DateUtils.last_day_of_month(year, month))
         month = ((quarter - 1) * 3) + 1
-        return datetime.datetime(year, month, 1)
+        return datetime.date(year, month, 1)
 
     @staticmethod
     def from_half_number(year, half, end=False):
         if end:
             month = (half * 6)
-            return datetime.datetime(year, month,
-                                     DateUtils.last_day_of_month(year, month))
+            return datetime.date(year, month,
+                                 DateUtils.last_day_of_month(year, month))
         month = ((half - 1) * 6) + 1
-        return datetime.datetime(year, month, 1)
+        return datetime.date(year, month, 1)
 
     @staticmethod
     def from_year(year, end=False):
         if end:
-            return datetime.datetime(year, 12,
-                                     DateUtils.last_day_of_month(year, 12))
-        return datetime.datetime(year, 1, 1)
+            return datetime.date(year, 12, DateUtils.last_day_of_month(year, 12))
+        return datetime.date(year, 1, 1)
 
     @staticmethod
     def from_date_offset(date, day_offset):
@@ -117,7 +115,7 @@ class DateUtils(datetime.date):
             date_a.day == date_b.day
 
     @staticmethod
-    def format_delta(delta):
+    def format_delta_as_hours(delta):
         hours = (delta.days * 24) + (delta.seconds // 3600)
         seconds = (delta.seconds // 60) % 60
         return "%02i:%02i" % (hours, seconds)
@@ -127,9 +125,9 @@ class DateUtils(datetime.date):
         match = FULL_DATE_REGEX.match(string)
         current_year = datetime.datetime.now().year
         if match:
-            date = datetime.datetime(int(match.group(3)),
-                                     int(match.group(2)),
-                                     int(match.group(1)))
+            date = datetime.date(int(match.group(3)),
+                                 int(match.group(2)),
+                                 int(match.group(1)))
             return [date, date]
 
         match = MONTH_REGEX.match(string)
@@ -137,8 +135,8 @@ class DateUtils(datetime.date):
             month = int(match.group(1))
             year = int(match.group(2))
             last_day_of_month = DateUtils.last_day_of_month(year, month)
-            return [datetime.datetime(year, month, 1),
-                    datetime.datetime(year, month, last_day_of_month)]
+            return [datetime.date(year, month, 1),
+                    datetime.date(year, month, last_day_of_month)]
 
         match = WEEK_REGEX.match(string)
         if match:

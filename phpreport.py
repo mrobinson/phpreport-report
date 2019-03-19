@@ -328,7 +328,7 @@ class TaskFilter():
             return self.customer.name
         return self.user.login
 
-    def create_instance_for_dates(self, start_date, end_date):
+    def create_same_filter_with_different_dates(self, start_date, end_date):
         task_filter = TaskFilter(project=self.project,
                                  customer=self.customer,
                                  user=self.user)
