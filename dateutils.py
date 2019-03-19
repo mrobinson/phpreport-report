@@ -122,6 +122,12 @@ class DateUtils():
 
     @staticmethod
     def date_from_string(string):
+        # This is useful for when a range is specified, but only one side
+        # is filled (eg "w11-"). We assume the empty side should be the
+        # current date.
+        if string == '':
+            return [datetime.date.today(), datetime.date.today()]
+
         match = FULL_DATE_REGEX.match(string)
         current_year = datetime.datetime.now().year
         if match:

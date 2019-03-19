@@ -157,5 +157,11 @@ class TestDateUtils(unittest.TestCase):
             dates = DateUtils.date_from_string("H0/2012")
         with self.assertRaises(ValueError):
             dates = DateUtils.date_from_string("H0234/2012")
+
+    def test_date_range(self):
+        dates = DateUtils.date_range_from_string("w11-")
+        self.assertEqual(dates[0], DateUtils.date_from_string("w11")[0])
+        self.assertEqual(dates[1], datetime.date.today())
+
 if __name__ == '__main__':
     unittest.main()
