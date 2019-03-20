@@ -28,6 +28,7 @@
 import argparse
 import datetime
 import enum
+import itertools
 import multiprocessing
 import re
 import textwrap
@@ -373,11 +374,10 @@ class TwikiFormatter(TextFormatter):
             for i in range(0, len(l), n):
                 yield l[i:i+n]
 
-        def transpose_to_columns(lists):
-            return list(map(lambda *row: [elem or ['', ''] for elem in row], *lists))
+        def transpose_table(table):
+            return list(map(list, itertools.zip_longest(*table, fillvalue=['', ''])))
 
-        table = chunks_of_n(table, 10)
-        table = transpose_to_columns(table)
+        table = transpose_table(chunks_of_n(table, 10))
         for row in table:
             # Now we have a row of pairs, but we need to flatten it.
             row = sum(row, [])
