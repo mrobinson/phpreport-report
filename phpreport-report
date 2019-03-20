@@ -69,10 +69,9 @@ class PeriodOfWork():
 
     def add_task_if_starts_in_period(self, task):
         ending_date = DateUtils.from_date_offset(self.start_date, self.num_days)
-        task_start = datetime.datetime.combine(task.date, datetime.datetime.min.time())
-        if task_start < self.start_date:
+        if task.date < self.start_date:
             return False
-        if task_start >= ending_date:
+        if task.date >= ending_date:
             return False
         self.add_task(task)
         return True
