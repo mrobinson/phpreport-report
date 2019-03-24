@@ -25,15 +25,10 @@
 import datetime
 import enum
 import itertools
-import multiprocessing
 import re
 import textwrap
-import urllib.error
-import urllib.parse
-import urllib.request
 
 from dateutils import DateUtils
-from phpreport import Credential
 from phpreport import PHPReport
 from phpreport import TaskFilter
 
@@ -197,7 +192,6 @@ class AggregateReport():
             total += time
             total_onsite += time_onsite
 
-        print(table_contents)
         self.formatter.generate_table(table_contents, has_headers=False)
 
         self.formatter.generate_header(
@@ -372,7 +366,6 @@ class TwikiFormatter(TextFormatter):
         table = transpose_table(chunks_of_n(table, 10))
         for row in table:
             row = sum(row, [])
-            print(row)
             self.generate_table_row(row, highlight_first=False)
 
     def generate_header(self, header):
@@ -430,7 +423,7 @@ class ReportCreator():
         self.reports = []
 
     def formatter(self):
-        if self.args.formatter == "twiki" or self.args.twiki:
+        if self.args.formatter == "twiki":
             return TwikiFormatter()
         if self.args.formatter == "markdown":
             return MarkdownFormatter()
@@ -462,75 +455,3 @@ class ReportCreator():
                                                parent=self.parent_report,
                                                formatter=self.formatter(),
                                                include_story=self.args.story))
-
-    def output_report_list(self, report_list):
-        if self.args.twiki:
-            uploader = TwikiUploader(url=self.args.twiki,
-                                     username=PHPReport.credential.username,
-                                     password=PHPReport.credential.password)
-            uploader.upload(report_list, self.reports)
-        else:
-            for report in report_list:
-                print(report.generate_report())
-
-    def output_reports(self):
-        # We output the parent first for the Twiki uploader,
-        # because the children depend on the existence of the parent.
-        if self.args.twiki and self.parent_report:
-            self.output_report_list([self.parent_report])
-
-        self.output_report_list(self.reports)
-
-        if not(self.args.twiki) and self.parent_report:
-            self.output_report_list([self.parent_report])
-
-
-def send_url_request(request):
-    try:
-        urllib.request.urlopen(request)
-    except urllib.error.URLError as url_error:
-        print(url_error)
-        print("Could not complete upload to TWiki at %s" % request.get_full_url())
-
-
-class TwikiUploader():
-    def __init__(self, url, section="Main", username=None, password=None):
-        self.url = url
-        self.section = section
-
-        # Ensure that we can log in to the TWiki with HTTP authentication.
-        Credential(self.url, username, password).activate()
-
-    @classmethod
-    def add_links_for_short_strings(cls, contents, reports):
-        for report in reports:
-            if not hasattr(report, "time_period"):
-                continue
-
-            short_string = report.time_period.short_string()
-            contents = re.sub(r"%s(\W)" % short_string,
-                              r"[[%s][%s]]\g<1>" % (report.wiki_string, short_string),
-                              contents)
-        return contents
-
-    def upload(self, reports, all_reports):
-        requests = [self.prepare_report(report, all_reports) for report in reports]
-        pool = multiprocessing.Pool(processes=10)
-        return pool.map(send_url_request, requests)
-
-    def prepare_report(self, report, all_reports):
-        page_name = report.wiki_string
-
-        full_save_url = "%s/twiki/bin/save/%s/%s" % (self.url, self.section, page_name)
-        full_view_url = "%s/twiki/bin/view/%s/%s" % (self.url, self.section, page_name)
-        print("Uploading report to %s" % full_view_url)
-
-        request = urllib.request.Request(full_save_url)
-
-        contents = self.add_links_for_short_strings(report.generate_report(), all_reports)
-        request_data = {'text': contents.encode('latin1')}
-        if report.parent:
-            request_data['topicparent'] = report.parent.wiki_string
-
-        request.data = urllib.parse.urlencode(request_data).encode('latin1')
-        return request

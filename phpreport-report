@@ -38,9 +38,13 @@ def main():
     args = ArgumentParser().parse()
     PHPReport.login(username=args.login)
 
-    report_creator = ReportCreator(args)
-    report_creator.create_reports()
-    report_creator.output_reports()
+    creator = ReportCreator(args)
+    creator.create_reports()
+
+    for report in creator.reports:
+        print(report.generate_report())
+    if creator.parent_report:
+        print(creator.parent_report.generate_report())
 
 if __name__ == '__main__':
     main()

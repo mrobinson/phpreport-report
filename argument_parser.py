@@ -48,9 +48,6 @@ class ArgumentParser(argparse.ArgumentParser):
 
         self.add_argument('-f', '--formatter', choices=['text', 'twiki', 'markdown'],
                           default="text", help="output format for report")
-        self.add_argument('--twiki', metavar="TWIKI_URL", type=str,
-                          help="Use TWiki mode, which uploads both detailed and " +
-                          "aggregate reports to the given TWiki URL.")
         self.add_argument('--no-story', action='store_false', dest='story',
                           help="Do not include the story tag in the output")
 
