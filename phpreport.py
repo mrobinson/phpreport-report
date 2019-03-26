@@ -23,7 +23,8 @@
 
 import multiprocessing
 import sys
-import urllib
+import urllib.error
+import urllib.request
 from xml.etree import ElementTree
 
 import base64
