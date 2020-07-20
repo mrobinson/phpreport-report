@@ -33,6 +33,7 @@ import getpass
 import http.client
 import keyring
 
+KEYRING_SERVICE_NAME = "PHPReport"
 DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
 http.client.HTTPConnection.debuglevel = 0
@@ -44,35 +45,33 @@ class Credential():
 
     @classmethod
     def for_url(cls, url, username=None):
+        username_and_password = keyring.get_password(KEYRING_SERVICE_NAME, url)
+        if username_and_password:
+            (username, password) = username_and_password.split(':', 1)
+            return Credential(url, username, password, True)
+
+        if url in cls.all_credentials:
+            return cls.all_credentials[url]
+
         if not username:
             username = input("Username: ")
-
-        key = (url, username)
-        if key in cls.all_credentials:
-            return cls.all_credentials[key]
-
-        password = keyring.get_password("PHPReport", username)
-        saved = True
-        if not password:
-            password = getpass.getpass("Password: ")
-            saved = False
-
-        credential = Credential(url, username, password, saved)
-        cls.all_credentials[key] = credential
-        return credential
+        password = getpass.getpass("Password: ")
+        return Credential(url, username, password, False)
 
     def __init__(self, url, username, password, saved=False):
         self.url = url
         self.username = username
         self.password = password
         self.saved = saved
+        self.all_credentials[self.url] = self
 
     def save(self):
         if self.saved:
             return
         if input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
             return
-        keyring.set_password("PHPReport", self.username, self.password)
+        keyring.set_password(KEYRING_SERVICE_NAME, self.url,
+                             "{}:{}".format(self.username, self.password))
 
     def activate(self):
         cls = type(self)
