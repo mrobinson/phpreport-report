@@ -120,7 +120,7 @@ class Task(PHPReportObject):
         self.onsite = False
         self.telework = False
 
-        for child in task_xml.getchildren():
+        for child in task_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
             elif child.tag == "ttype":
@@ -168,7 +168,7 @@ class Project(PHPReportObject):
         self.init_date = None
         self.end_date = None
 
-        for child in project_xml.getchildren():
+        for child in project_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
             if child.tag == "description":
@@ -199,7 +199,7 @@ class Project(PHPReportObject):
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
-        for child in user_xml.getchildren():
+        for child in user_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
             if child.tag == "login":
@@ -217,7 +217,7 @@ class User(PHPReportObject):
 
 class Customer(PHPReportObject):
     def __init__(self, customer_xml):
-        for child in customer_xml.getchildren():
+        for child in customer_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
             if child.tag == "name":
