@@ -316,6 +316,10 @@ class PHPReport():
         responses = fetch_urls_in_parallel([task_filter.to_url(cls) for task_filter in task_filters])
         return [cls.create_objects_from_response(x, Task, "task") for x in responses]
 
+    @classmethod
+    def get_tasks_for_task_filter(cls, task_filter):
+        contents = PHPReport.get_contents_of_url(task_filter.to_url(cls))
+        return cls.create_objects_from_response(contents, Task, "task")
 
 
 class TaskFilter():
@@ -325,6 +329,13 @@ class TaskFilter():
         self.user = user
         self.start_date = None
         self.end_date = None
+
+    @classmethod
+    def from_dates(cls, start_date, end_date):
+        task_filter = TaskFilter()
+        task_filter.start_date = start_date
+        task_filter.end_date = end_date
+        return task_filter
 
     def __str__(self):
         if self.project:
@@ -340,7 +351,6 @@ class TaskFilter():
         task_filter.start_date = start_date
         task_filter.end_date = end_date
         return task_filter
-
 
     def to_url(self, phpreport):
         url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
