@@ -171,12 +171,17 @@ class Project(PHPReportObject):
         for child in project_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
+            if child.tag == "customerId":
+                self.customer_id = PHPReportObject.id_string_to_integer(child.text)
+                if self.customer_id != -1:
+                    self.customer = Customer.find(self.customer_id)
             if child.tag == "description":
                 self.description = child.text
             if child.tag == "initDate" and child.text:
                 self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
             if child.tag == "endDate" and child.text:
                 self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+
 
     def __str__(self):
         return self.description
@@ -297,9 +302,9 @@ class PHPReport():
             "%s/getAllUsersService.php?sid=%s" % (cls.address, PHPReport.session_id),
             "%s/getUserCustomersService.php?sid=%s" % (cls.address, PHPReport.session_id),
         ])
-        Project.load_all(responses[0], "project")
-        User.load_all(responses[1], "user")
         Customer.load_all(responses[2], "customer")
+        User.load_all(responses[1], "user")
+        Project.load_all(responses[0], "project")
 
     @staticmethod
     def create_objects_from_response(response, cls, tag):
