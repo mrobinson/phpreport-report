@@ -98,6 +98,7 @@ class PHPReportObject():
         instances = PHPReport.create_objects_from_response(data, cls, tag)
 
         cls.instances = {}
+        cls.instances[-1] = cls(None)
         for instance in instances:
             cls.instances[instance.phpreport_id] = instance
 
@@ -119,6 +120,13 @@ class Task(PHPReportObject):
         self.project = None
         self.onsite = False
         self.telework = False
+
+        if not task_xml:
+            self.phpreport_id = -1
+            self.type = ""
+            self.date = self.init_time = self.end_time = datetime.datetime(1970, 1, 1)
+            self.project = Project.find(-1)
+            return
 
         for child in task_xml:
             if child.tag == "id":
@@ -168,13 +176,20 @@ class Project(PHPReportObject):
         self.init_date = None
         self.end_date = None
 
+        if not project_xml:
+            self.phpreport_id = -1
+            self.description = "<unknown>"
+            self.customer_id = -1
+            self.customer = Customer.find(-1)
+            self.init_date = self.end_date = datetime.datetime(1970, 1, 1)
+            return
+
         for child in project_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
             if child.tag == "customerId":
                 self.customer_id = PHPReportObject.id_string_to_integer(child.text)
-                if self.customer_id != -1:
-                    self.customer = Customer.find(self.customer_id)
+                self.customer = Customer.find(self.customer_id)
             if child.tag == "description":
                 self.description = child.text
             if child.tag == "initDate" and child.text:
@@ -204,6 +219,11 @@ class Project(PHPReportObject):
 
 class User(PHPReportObject):
     def __init__(self, user_xml):
+        if not user_xml:
+            self.phpreport_id = -1
+            self.login = "<unknown>"
+            return
+
         for child in user_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
@@ -222,6 +242,11 @@ class User(PHPReportObject):
 
 class Customer(PHPReportObject):
     def __init__(self, customer_xml):
+        if not customer_xml:
+            self.phpreport_id = -1
+            self.name = "<unknown>"
+            return
+
         for child in customer_xml:
             if child.tag == "id":
                 self.phpreport_id = int(child.text)
