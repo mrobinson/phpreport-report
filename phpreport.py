@@ -195,7 +195,7 @@ class Project(PHPReportObject):
             if child.tag == "initDate" and child.text:
                 self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
             if child.tag == "endDate" and child.text:
-                self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+                self.end_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
 
 
     def __str__(self):
