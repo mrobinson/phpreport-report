@@ -39,7 +39,7 @@ URLS_TO_FETCH_IN_PARALLEL = 10
 http.client.HTTPConnection.debuglevel = 0
 
 
-class Credential():
+class Credential:
     all_credentials = {}
     password_manager = None
 
@@ -47,7 +47,7 @@ class Credential():
     def for_url(cls, url, username=None):
         username_and_password = keyring.get_password(KEYRING_SERVICE_NAME, url)
         if username_and_password:
-            (username, password) = username_and_password.split(':', 1)
+            (username, password) = username_and_password.split(":", 1)
             return Credential(url, username, password, True)
 
         if url in cls.all_credentials:
@@ -68,27 +68,33 @@ class Credential():
     def save(self):
         if self.saved:
             return
-        if input("Store password for '%s' in keyring? (y/N) " % self.username) != 'y':
+        if input("Store password for '%s' in keyring? (y/N) " % self.username) != "y":
             return
-        keyring.set_password(KEYRING_SERVICE_NAME, self.url,
-                             "{}:{}".format(self.username, self.password))
+        keyring.set_password(
+            KEYRING_SERVICE_NAME, self.url, "{}:{}".format(self.username, self.password)
+        )
 
     def activate(self):
         cls = type(self)
         if cls.password_manager:
-            cls.password_manager.add_password(None, self.url, self.username, self.password)
+            cls.password_manager.add_password(
+                None, self.url, self.username, self.password
+            )
             return
 
         cls.password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        urllib.request.install_opener(urllib.request.build_opener(
-            urllib.request.HTTPBasicAuthHandler(cls.password_manager)))
+        urllib.request.install_opener(
+            urllib.request.build_opener(
+                urllib.request.HTTPBasicAuthHandler(cls.password_manager)
+            )
+        )
         self.activate()
 
     def __eq__(self, other):
         return self.url == other.url and self.username == other.username
 
 
-class PHPReportObject():
+class PHPReportObject:
     @classmethod
     def find(cls, phpreport_id):
         return cls.instances[phpreport_id]
@@ -193,10 +199,13 @@ class Project(PHPReportObject):
             if child.tag == "description":
                 self.description = child.text
             if child.tag == "initDate" and child.text:
-                self.init_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+                self.init_date = datetime.datetime.strptime(
+                    child.text, "%Y-%m-%d"
+                ).date()
             if child.tag == "endDate" and child.text:
-                self.end_date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
-
+                self.end_date = datetime.datetime.strptime(
+                    child.text, "%Y-%m-%d"
+                ).date()
 
     def __str__(self):
         return self.description
@@ -269,7 +278,7 @@ def fetch_urls_in_parallel(urls):
     return pool.map(get_url_contents, urls)
 
 
-class PHPReport():
+class PHPReport:
     users = {}
     projects = {}
     customers = {}
@@ -290,7 +299,7 @@ class PHPReport():
     def send_login_request(cls, address, username, password):
         url = "%s/loginService.php" % address
         request = urllib.request.Request(url, None)
-        auth_string = bytes('%s:%s' % (username, password), 'UTF-8')
+        auth_string = bytes("%s:%s" % (username, password), "UTF-8")
         request.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
         try:
             return urllib.request.urlopen(request).read()
@@ -306,7 +315,9 @@ class PHPReport():
         cls.credential.activate()
 
         print("Logging in...")
-        response = cls.send_login_request(cls.address, cls.credential.username, cls.credential.password)
+        response = cls.send_login_request(
+            cls.address, cls.credential.username, cls.credential.password
+        )
 
         cls.session_id = None
         tree = ElementTree.fromstring(response)
@@ -315,30 +326,42 @@ class PHPReport():
                 cls.session_id = child.text
 
         if not cls.session_id:
-            print("Could not find session id in login response, password likely incorrect: %s" % response)
+            print(
+                "Could not find session id in login response, password likely incorrect: %s"
+                % response
+            )
             sys.exit(1)
 
         cls.credential.save()
 
         # Use multiprocessing to access all URLs at once to reduce the latency of starting up.
         print("Loading PHPReport data...")
-        responses = fetch_urls_in_parallel([
-            "%s/getProjectsService.php?sid=%s" % (cls.address, PHPReport.session_id),
-            "%s/getAllUsersService.php?sid=%s" % (cls.address, PHPReport.session_id),
-            "%s/getUserCustomersService.php?sid=%s" % (cls.address, PHPReport.session_id),
-        ])
+        responses = fetch_urls_in_parallel(
+            [
+                "%s/getProjectsService.php?sid=%s"
+                % (cls.address, PHPReport.session_id),
+                "%s/getAllUsersService.php?sid=%s"
+                % (cls.address, PHPReport.session_id),
+                "%s/getUserCustomersService.php?sid=%s"
+                % (cls.address, PHPReport.session_id),
+            ]
+        )
         Customer.load_all(responses[2], "customer")
         User.load_all(responses[1], "user")
         Project.load_all(responses[0], "project")
 
     @staticmethod
     def create_objects_from_response(response, cls, tag):
-        return [cls(child) for child in ElementTree.fromstring(response) if child.tag == tag]
+        return [
+            cls(child) for child in ElementTree.fromstring(response) if child.tag == tag
+        ]
 
     @classmethod
     def get_tasks_for_task_filters(cls, task_filters):
         print("Fetching tasks...")
-        responses = fetch_urls_in_parallel([task_filter.to_url(cls) for task_filter in task_filters])
+        responses = fetch_urls_in_parallel(
+            [task_filter.to_url(cls) for task_filter in task_filters]
+        )
         return [cls.create_objects_from_response(x, Task, "task") for x in responses]
 
     @classmethod
@@ -347,7 +370,7 @@ class PHPReport():
         return cls.create_objects_from_response(contents, Task, "task")
 
 
-class TaskFilter():
+class TaskFilter:
     def __init__(self, project=None, customer=None, user=None):
         self.project = project
         self.customer = customer
@@ -370,16 +393,18 @@ class TaskFilter():
         return self.user.login
 
     def create_same_filter_with_different_dates(self, start_date, end_date):
-        task_filter = TaskFilter(project=self.project,
-                                 customer=self.customer,
-                                 user=self.user)
+        task_filter = TaskFilter(
+            project=self.project, customer=self.customer, user=self.user
+        )
         task_filter.start_date = start_date
         task_filter.end_date = end_date
         return task_filter
 
     def to_url(self, phpreport):
-        url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % \
-              (phpreport.address, phpreport.session_id)
+        url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % (
+            phpreport.address,
+            phpreport.session_id,
+        )
         if self.start_date:
             url += "&filterStartDate=%s" % self.start_date.strftime("%Y-%m-%d")
         if self.end_date:

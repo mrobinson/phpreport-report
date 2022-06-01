@@ -36,13 +36,11 @@ from phpreport import PHPReport
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)))
 
+
 def user_hours_table(query):
     rows = []
     days = query.days()
-    rows.append(
-        [''] +
-        [day.start_date.strftime("%d %b") for day in days] +
-        ['Total'])
+    rows.append([""] + [day.start_date.strftime("%d %b") for day in days] + ["Total"])
 
     for user in query.users():
         row = [user.login]
@@ -54,11 +52,13 @@ def user_hours_table(query):
         rows.append(row)
 
     rows.append(
-        ['everyone'] +
-        [DateUtils.format_delta_as_hours(day.time_worked()) for day in days] +
-        [DateUtils.format_delta_as_hours(query.time_worked())])
+        ["everyone"]
+        + [DateUtils.format_delta_as_hours(day.time_worked()) for day in days]
+        + [DateUtils.format_delta_as_hours(query.time_worked())]
+    )
 
     return rows
+
 
 def create_markdown_table(table):
     output = []
@@ -72,21 +72,25 @@ def create_markdown_table(table):
 
     return "".join(output)
 
+
 def as_hours(delta):
     return DateUtils.format_delta_as_hours(delta)
 
+
 def wrapped(content, width):
-    for content_line in content.splitlines(): # Preserve existing newlines.
-        for line in textwrap.wrap(content_line,
-                                  break_long_words=False,  # Don't break URLs.
-                                  break_on_hyphens=False, # URLs also have hyphens.
-                                  replace_whitespace=False,
-                                  width=width):
+    for content_line in content.splitlines():  # Preserve existing newlines.
+        for line in textwrap.wrap(
+            content_line,
+            break_long_words=False,  # Don't break URLs.
+            break_on_hyphens=False,  # URLs also have hyphens.
+            replace_whitespace=False,
+            width=width,
+        ):
             yield line
 
 
-class Query():
-    def __init__(self, tasks, start_date=None, end_date=None, description=''):
+class Query:
+    def __init__(self, tasks, start_date=None, end_date=None, description=""):
         self.tasks = tasks
         self.start_date = start_date
         self.end_date = end_date
@@ -112,12 +116,13 @@ class Query():
         if not args.time:
             assert task_filter.project
             tasks = PHPReport.get_tasks_for_task_filter(task_filter)
-            description = tasks[0].project.description if tasks else ''
+            description = tasks[0].project.description if tasks else ""
             return cls(tasks, description=description)
 
         start_date, end_date = DateUtils.date_range_from_string(args.time)
         task_filter = task_filter.create_same_filter_with_different_dates(
-            start_date, end_date)
+            start_date, end_date
+        )
         tasks = PHPReport.get_tasks_for_task_filter(task_filter)
         return cls(tasks, start_date=start_date, end_date=end_date)
 
@@ -130,8 +135,14 @@ class Query():
             return task_descriptions
         return list(collections.OrderedDict.fromkeys(task_descriptions))
 
-    def filtered(self, start_date=None, end_date=None, user=None,
-                 only_onsite=False, description=''):
+    def filtered(
+        self,
+        start_date=None,
+        end_date=None,
+        user=None,
+        only_onsite=False,
+        description="",
+    ):
         start_date = start_date or self.start_date
         end_date = end_date or self.end_date
 
@@ -145,16 +156,24 @@ class Query():
             if only_onsite and not task.onsite:
                 return False
             return True
-        return Query(list(filter(filter_task, self.tasks)),
-                     start_date, end_date, description=description)
+
+        return Query(
+            list(filter(filter_task, self.tasks)),
+            start_date,
+            end_date,
+            description=description,
+        )
 
     def days(self):
         output = []
         current = self.start_date
         while current <= self.end_date:
             description = current.strftime("%d %b %Y")
-            output.append(self.filtered(start_date=current, end_date=current,
-                                        description=description))
+            output.append(
+                self.filtered(
+                    start_date=current, end_date=current, description=description
+                )
+            )
             current += datetime.timedelta(days=1)
         return output
 
@@ -167,8 +186,11 @@ class Query():
 
             (year_number, week_number) = DateUtils.year_and_week_number(sunday)
             description = "Week {}, {}".format(week_number, year_number)
-            output.append(self.filtered(start_date=current, end_date=end_date,
-                                        description=description))
+            output.append(
+                self.filtered(
+                    start_date=current, end_date=end_date, description=description
+                )
+            )
 
             current = sunday + datetime.timedelta(days=1)
 
@@ -176,21 +198,24 @@ class Query():
 
     def render_template(self, template):
         from jinja2 import Environment, FileSystemLoader
+
         environment = Environment(
-            loader=FileSystemLoader([
-                SCRIPT_PATH,
-                os.path.join(SCRIPT_PATH, "templates"),
-                os.getcwd(),
-            ]),
-            extensions=['jinja2.ext.do'],
+            loader=FileSystemLoader(
+                [
+                    SCRIPT_PATH,
+                    os.path.join(SCRIPT_PATH, "templates"),
+                    os.getcwd(),
+                ]
+            ),
+            extensions=["jinja2.ext.do"],
         )
-        environment.filters['user_hours_table'] = user_hours_table
-        environment.filters['create_markdown_table'] = create_markdown_table
-        environment.filters['as_hours'] = as_hours
-        environment.filters['wrapped'] = wrapped
+        environment.filters["user_hours_table"] = user_hours_table
+        environment.filters["create_markdown_table"] = create_markdown_table
+        environment.filters["as_hours"] = as_hours
+        environment.filters["wrapped"] = wrapped
 
         template = environment.get_template(template)
-        template.globals['DateUtils'] = DateUtils
+        template.globals["DateUtils"] = DateUtils
 
         return template.render(query=self)
 
@@ -198,13 +223,18 @@ class Query():
 def main():
     parser = ArgumentParser()
     parser.add_argument(
-        '--template', metavar="TEMPLATE", type=str,
-        default="default.txt", help="A template to use for the report.")
+        "--template",
+        metavar="TEMPLATE",
+        type=str,
+        default="default.txt",
+        help="A template to use for the report.",
+    )
     args = parser.parse()
 
     PHPReport.login(username=args.login)
 
     print(Query.with_args(args).render_template(args.template))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
