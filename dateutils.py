@@ -94,6 +94,10 @@ class DateUtils():
         return cls.from_week_number(*cls.year_and_week_number(date))
 
     @classmethod
+    def sunday(cls, date):
+        return cls.monday(date) + datetime.timedelta(days=7)
+
+    @classmethod
     def next_week(cls, date):
         return cls.from_date_offset(date, 7)
 

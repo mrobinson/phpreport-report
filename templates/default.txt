@@ -1,0 +1,48 @@
+{% set weeks = query.weeks() -%}
+{% for week in weeks -%}
+
+# {{ week.description }}
+{{ week | user_hours_table | create_markdown_table }}
+
+{% for user in week.users() -%}
+    {%- set lines = [] %}
+
+    {%- for day in week.filtered(user=user).days() %}
+    {%- set day_lines = [] %}
+    {%- for task_description in day.task_descriptions() -%}
+        {%- for line in task_description | wrapped(90) -%}
+            {% do day_lines.append(line) %}
+        {%- endfor %}
+    {%- endfor -%}
+
+    {%- if day_lines %}
+        {%- do lines.append([day.start_date.strftime('%A'), day_lines]) %}
+    {%- endif %}
+{%- endfor %}
+
+{%- if lines %}
+## Stories for {{user.login}}
+    {%- for lines_for_day in lines %}
+- **{{ lines_for_day[0] }}**
+        {%- for story in lines_for_day[1] %}
+    {{ story }}
+        {%- endfor %}
+    {%- endfor %}
+{%- endif %}
+
+{%- endfor %}
+
+{% endfor -%}
+
+{%- if weeks | length > 1 %}
+
+
+{%- for week in weeks -%}
+{{ week.description }}: {{ week.time_worked() | as_hours }}
+{% endfor -%}
+Total hours worked: {{ query.time_worked() | as_hours }}
+{%- set onsite_hours = query.filtered(only_onsite=True).time_worked() %}
+{%- if onsite_hours %}
+Total hours worked onsite: {{ onsite_hours | as_hours }}
+{%- endif -%}
+{%- endif -%}

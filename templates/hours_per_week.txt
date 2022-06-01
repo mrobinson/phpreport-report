@@ -1,0 +1,7 @@
+{% for week in query.weeks() -%}
+{%- if week.time_worked() %}
+{{ week.description }}: {{ week.time_worked() | as_hours }} hours
+{%- endif %}
+{%- endfor %}
+
+Total: {{ query.time_worked() | as_hours }} hours

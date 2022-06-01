@@ -25,26 +25,186 @@
 #
 # pylint: disable=invalid-name
 
+import collections
 import datetime
+import os
 import textwrap
 
 from argument_parser import ArgumentParser
 from dateutils import DateUtils
 from phpreport import PHPReport
-from report_creator import ReportCreator
+
+SCRIPT_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)))
+
+def user_hours_table(query):
+    rows = []
+    days = query.days()
+    rows.append(
+        [''] +
+        [day.start_date.strftime("%d %b") for day in days] +
+        ['Total'])
+
+    for user in query.users():
+        row = [user.login]
+        for day in days:
+            time_worked = day.filtered(user=user).time_worked()
+            row.append(DateUtils.format_delta_as_hours(time_worked))
+        time_worked = query.filtered(user=user).time_worked()
+        row.append(DateUtils.format_delta_as_hours(time_worked))
+        rows.append(row)
+
+    rows.append(
+        ['everyone'] +
+        [DateUtils.format_delta_as_hours(day.time_worked()) for day in days] +
+        [DateUtils.format_delta_as_hours(query.time_worked())])
+
+    return rows
+
+def create_markdown_table(table):
+    output = []
+    columns = zip(*table)
+    column_lengths = [max([len(cell) for cell in row]) for row in columns]
+    table.insert(1, ["-" * length for length in column_lengths])
+
+    for row in table:
+        row = [column.ljust(length) for column, length in zip(row, column_lengths)]
+        output.append(f"| {' | '.join(row)} | \n")
+
+    return "".join(output)
+
+def as_hours(delta):
+    return DateUtils.format_delta_as_hours(delta)
+
+def wrapped(content, width):
+    for content_line in content.splitlines(): # Preserve existing newlines.
+        for line in textwrap.wrap(content_line,
+                                  break_long_words=False,  # Don't break URLs.
+                                  break_on_hyphens=False, # URLs also have hyphens.
+                                  replace_whitespace=False,
+                                  width=width):
+            yield line
+
+
+class Query():
+    def __init__(self, tasks, start_date=None, end_date=None, description=''):
+        self.tasks = tasks
+        self.start_date = start_date
+        self.end_date = end_date
+        self.description = description
+
+        if not self.start_date:
+            self.start_date = min([task.date for task in self.tasks])
+        if not self.end_date:
+            self.end_date = max([task.date for task in self.tasks])
+
+        self.__users = set()
+        for task in self.tasks:
+            self.__users.add(task.user)
+
+    def users(self):
+        return sorted(list(self.__users))
+
+    @classmethod
+    def with_args(cls, args):
+        task_filter = args.to_task_filter()
+
+        print("Fetching tasks...")
+        if not args.time:
+            assert task_filter.project
+            tasks = PHPReport.get_tasks_for_task_filter(task_filter)
+            description = tasks[0].project.description if tasks else ''
+            return cls(tasks, description=description)
+
+        start_date, end_date = DateUtils.date_range_from_string(args.time)
+        task_filter = task_filter.create_same_filter_with_different_dates(
+            start_date, end_date)
+        tasks = PHPReport.get_tasks_for_task_filter(task_filter)
+        return cls(tasks, start_date=start_date, end_date=end_date)
+
+    def time_worked(self):
+        return sum([task.length() for task in self.tasks], datetime.timedelta())
+
+    def task_descriptions(self, remove_duplicates=True):
+        task_descriptions = [task.text for task in self.tasks]
+        if not remove_duplicates:
+            return task_descriptions
+        return list(collections.OrderedDict.fromkeys(task_descriptions))
+
+    def filtered(self, start_date=None, end_date=None, user=None,
+                 only_onsite=False, description=''):
+        start_date = start_date or self.start_date
+        end_date = end_date or self.end_date
+
+        def filter_task(task):
+            if user is not None and task.user != user:
+                return False
+            if start_date > task.date:
+                return False
+            if end_date < task.date:
+                return False
+            if only_onsite and not task.onsite:
+                return False
+            return True
+        return Query(list(filter(filter_task, self.tasks)),
+                     start_date, end_date, description=description)
+
+    def days(self):
+        output = []
+        current = self.start_date
+        while current <= self.end_date:
+            description = current.strftime("%d %b %Y")
+            output.append(self.filtered(start_date=current, end_date=current,
+                                        description=description))
+            current += datetime.timedelta(days=1)
+        return output
+
+    def weeks(self):
+        output = []
+        current = self.start_date
+        while current <= self.end_date:
+            sunday = DateUtils.monday(current) + datetime.timedelta(days=6)
+            end_date = min(self.end_date, sunday)
+
+            (year_number, week_number) = DateUtils.year_and_week_number(sunday)
+            description = "Week {}, {}".format(week_number, year_number)
+            output.append(self.filtered(start_date=current, end_date=end_date,
+                                        description=description))
+
+            current = sunday + datetime.timedelta(days=1)
+
+        return output
+
+    def render_template(self, template):
+        from jinja2 import Environment, FileSystemLoader
+        environment = Environment(
+            loader=FileSystemLoader([
+                SCRIPT_PATH,
+                os.path.join(SCRIPT_PATH, "templates"),
+                os.getcwd(),
+            ]),
+            extensions=['jinja2.ext.do'],
+        )
+        environment.filters['user_hours_table'] = user_hours_table
+        environment.filters['create_markdown_table'] = create_markdown_table
+        environment.filters['as_hours'] = as_hours
+        environment.filters['wrapped'] = wrapped
+
+        template = environment.get_template(template)
+        template.globals['DateUtils'] = DateUtils
+
+        return template.render(query=self)
 
 
 def main():
-    args = ArgumentParser().parse()
+    parser = ArgumentParser()
+    parser.add_argument(
+        '--template', metavar="TEMPLATE", type=str,
+        default="default.txt", help="A template to use for the report.")
+    args = parser.parse()
+
     PHPReport.login(username=args.login)
 
-    creator = ReportCreator(args)
-    creator.create_reports()
-
-    for report in creator.reports:
-        print(report.generate_report())
-    if creator.parent_report:
-        print(creator.parent_report.generate_report())
+    print(Query.with_args(args).render_template(args.template))
 
 if __name__ == '__main__':
     main()
