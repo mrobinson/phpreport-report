@@ -1,0 +1,3 @@
+{% for user in query.users() %}
+    {{ user }}: {{ query.filtered(user=user).time_worked() | as_hours }}
+{%- endfor %}
