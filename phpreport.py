@@ -371,10 +371,11 @@ class PHPReport:
 
 
 class TaskFilter:
-    def __init__(self, project=None, customer=None, user=None):
+    def __init__(self, project=None, customer=None, user=None, task_type=None):
         self.project = project
         self.customer = customer
         self.user = user
+        self.task_type = task_type
         self.start_date = None
         self.end_date = None
 
@@ -394,7 +395,10 @@ class TaskFilter:
 
     def create_same_filter_with_different_dates(self, start_date, end_date):
         task_filter = TaskFilter(
-            project=self.project, customer=self.customer, user=self.user
+            project=self.project,
+            customer=self.customer,
+            user=self.user,
+            task_type=self.task_type
         )
         task_filter.start_date = start_date
         task_filter.end_date = end_date
@@ -415,4 +419,6 @@ class TaskFilter:
             url += "&customerId=%i" % self.customer.phpreport_id
         if self.user is not None:
             url += "&userId=%i" % self.user.phpreport_id
+        if self.task_type is not None:
+            url += f"&type={self.task_type}"
         return url

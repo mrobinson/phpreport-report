@@ -40,6 +40,8 @@ class ArgumentParser(argparse.ArgumentParser):
                           help="only consider tasks matching given customer search string")
         self.add_argument('-u', '--user', type=str,
                           help="only consider tasks logged by the given user")
+        self.add_argument('--task-type', dest='task_type', type=str,
+                          help="only consider tasks with the given task type")
 
         # TODO: -w and --week are maintained for backward compatibility. Eventually
         # we should just remove them.
@@ -53,12 +55,14 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def parse(self, *args, **kwargs):
         args = ParsedArguments(super().parse_args(*args, **kwargs))
-        if not args.project and not args.customer and not args.user:
-            print("Must give either a customer (-c) search string or a product search string (-p)")
+        if not args.project and not args.customer and not args.user and not args.task_type:
+            print("Must give either a customer (-c) search string,"
+                  " product search string (-p) or task type (--task_type).")
             sys.exit(1)
 
         if not args.time and not args.project:
-            print("Must give either a project (-p) or a time range (-t)")
+            print("Must give either a project (-p), time range (-t),"
+                  " or task type (--task-type).")
             sys.exit(1)
         return args
 
@@ -118,7 +122,7 @@ class ParsedArguments():
             else:
                 user = users[0]
 
-        return TaskFilter(project=project, customer=customer, user=user)
+        return TaskFilter(project=project, customer=customer, user=user, task_type=self.task_type)
 
 def choose_from_list(items):
     assert len(items) > 1
