@@ -21,30 +21,42 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+import base64
+from collections import defaultdict
+import dataclasses
+import datetime
+import getpass
+import http.client
 import multiprocessing
 import sys
 import urllib.error
 import urllib.request
+
+from typing import Any, ClassVar, Dict, Optional, Type
 from xml.etree import ElementTree
 
-import base64
-import datetime
-import getpass
-import http.client
 import keyring
 
 KEYRING_SERVICE_NAME = "PHPReport"
 DEFAULT_PHPREPORT_ADDRESS = "https://phpreport.igalia.com/web/services"
 URLS_TO_FETCH_IN_PARALLEL = 10
+DEFAULT_DATE = datetime.datetime(1970, 1, 1)
 http.client.HTTPConnection.debuglevel = 0
 
 
+@dataclasses.dataclass()
 class Credential:
-    all_credentials = {}
-    password_manager = None
+    all_credentials: ClassVar[Dict[str, Credential]] = dataclasses.field(default={})
+    password_manager: ClassVar[Optional[urllib.request.HTTPPasswordMgrWithDefaultRealm]] = None
+    url: str
+    username: str
+    password: str
+    saved: bool = False
 
     @classmethod
-    def for_url(cls, url, username=None):
+    def for_url(cls, url: str, username=None):
         username_and_password = keyring.get_password(KEYRING_SERVICE_NAME, url)
         if username_and_password:
             (username, password) = username_and_password.split(":", 1)
@@ -56,13 +68,9 @@ class Credential:
         if not username:
             username = input("Username: ")
         password = getpass.getpass("Password: ")
-        return Credential(url, username, password, False)
+        return Credential(url=url, username=username, password=password, saved=False)
 
-    def __init__(self, url, username, password, saved=False):
-        self.url = url
-        self.username = username
-        self.password = password
-        self.saved = saved
+    def __post_init__(self):
         self.all_credentials[self.url] = self
 
     def save(self):
@@ -95,117 +103,117 @@ class Credential:
 
 
 class PHPReportObject:
-    @classmethod
-    def find(cls, phpreport_id):
-        return cls.instances[phpreport_id]
+    instances: Dict[Type, Dict[int, PHPReportObject]] = defaultdict(dict)
+
+    def __init__(self, phpreport_id: int = -1):
+        PHPReportObject.instances[type(self)][phpreport_id] = self
 
     @classmethod
-    def load_all(cls, data, tag):
-        instances = PHPReport.create_objects_from_response(data, cls, tag)
+    def all(cls):
+        return PHPReportObject.instances[cls].values()
 
-        cls.instances = {}
-        cls.instances[-1] = cls(None)
-        for instance in instances:
-            cls.instances[instance.phpreport_id] = instance
+    @classmethod
+    def find(cls, phpreport_id: int):
+        instances = PHPReportObject.instances[cls]
+        if phpreport_id == -1 and -1 not in instances:
+            cls() # Create the placeholder value.
+        return instances[phpreport_id]
 
-    @staticmethod
-    def id_string_to_integer(string):
-        if not string:
-            return -1
-        return int(string)
+    @classmethod
+    def from_element(cls, _: ElementTree.Element) -> PHPReportObject:
+        assert False, "Subclasses should override this abstract class method."
 
 
+@dataclasses.dataclass()
 class Task(PHPReportObject):
-    # pylint: disable=too-many-instance-attributes,too-many-branches
-    def __init__(self, task_xml):
-        self.text = ""
-        self.story = ""
+    phpreport_id: int = -1
+    user_id: int = -1
+    user: User = dataclasses.field(init=False)
+    project_id: int = -1
+    project: Project = dataclasses.field(init=False)
+    text: str = ""
+    story: str = ""
+    ttype: str = ""
+    phase: str = ""
+    date: datetime.date = dataclasses.field(default=DEFAULT_DATE.date())
+    init_time: datetime.datetime = dataclasses.field(default=DEFAULT_DATE)
+    end_time: datetime.datetime = dataclasses.field(default=DEFAULT_DATE)
+    onsite: bool = False
+    telework: bool = False
 
-        # These might be empty.
-        self.project_id = None
-        self.project = None
-        self.onsite = False
-        self.telework = False
+    def __post_init__(self):
+        super().__init__(self.phpreport_id)
+        self.user = User.find(self.user_id)
+        self.project = Project.find(self.project_id)
 
-        if not task_xml:
-            self.phpreport_id = -1
-            self.type = ""
-            self.date = self.init_time = self.end_time = datetime.datetime(1970, 1, 1)
-            self.project = Project.find(-1)
-            return
+        # There's a bug in PHPReport where 0:00 can be considered 24:00 when it's
+        # used as the end time. Work around that now:
+        # https://trac.phpreport.igalia.com/ticket/193
+        if self.end_time.hour == 0 and self.end_time.minute == 0:
+            self.end_time += datetime.timedelta(hours=24)
 
-        for child in task_xml:
-            if child.tag == "id":
-                self.phpreport_id = int(child.text)
-            elif child.tag == "ttype":
-                self.type = child.text
-            elif child.tag == "date":
-                self.date = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
-            elif child.tag == "initTime":
-                self.init_time = datetime.datetime.strptime(child.text, "%H:%M")
-            elif child.tag == "endTime":
-                self.end_time = datetime.datetime.strptime(child.text, "%H:%M")
+    @classmethod
+    def from_element(cls, task_xml: ElementTree.Element):
+        data: Dict[str, Any] = {child.tag: child.text for child in task_xml if child.text}
+        if "date" in data:
+            data["date"] = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
+        def make_time(data, key):
+            if key in data:
+                data[key] = datetime.datetime.combine(
+                    data.get("date", DEFAULT_DATE.date()),
+                    datetime.datetime.strptime(data[key], "%H:%M").time()
+                )
+        make_time(data, "initTime")
+        make_time(data, "endTime")
 
-                # There's a bug in PHPReport where 0:00 can be considered 24:00 when it's
-                # used as the end time. Work around that now:
-                # https://trac.phpreport.igalia.com/ticket/193
-                if self.end_time.hour == 0 and self.end_time.minute == 0:
-                    self.end_time += datetime.timedelta(hours=24)
-
-            elif child.tag == "story" and child.text is not None:
-                self.story = child.text
-            elif child.tag == "text" and child.text is not None:
-                self.text = child.text
-            elif child.tag == "phase":
-                self.phase = child.text
-            elif child.tag == "userId":
-                self.user_id = PHPReportObject.id_string_to_integer(child.text)
-                self.user = User.find(self.user_id)
-            elif child.tag == "projectId" and child.text:
-                self.project_id = PHPReportObject.id_string_to_integer(child.text)
-                self.project = Project.find(self.project_id)
-            elif child.tag == "customerId":
-                self.customer_id = PHPReportObject.id_string_to_integer(child.text)
-            elif child.tag == "taskStoryId":
-                self.task_story_id = child.text
-            elif child.tag == "telework" and child.text == "true":
-                self.telework = True
-            elif child.tag == "onsite" and child.text == "true":
-                self.onsite = True
+        return cls(
+            phpreport_id=int(data.get("id", "-1")),
+            user_id=int(data.get("userId", "-1")),
+            project_id=int(data.get("projectId", "-1")),
+            ttype=data.get("ttype", ""),
+            story=data.get("story", ""),
+            text=data.get("text", ""),
+            phase=data.get("phase", ""),
+            date=data.get("date", DEFAULT_DATE.date()),
+            init_time=data.get("initTime", DEFAULT_DATE),
+            end_time=data.get("endTime", DEFAULT_DATE),
+            onsite=data.get("onsite", "") == "true",
+            telework=data.get("telework", "") == "true"
+        )
 
     def length(self):
         return self.end_time - self.init_time
 
 
+@dataclasses.dataclass
 class Project(PHPReportObject):
-    def __init__(self, project_xml):
-        self.init_date = None
-        self.end_date = None
+    phpreport_id: int = -1
+    description: str = "<description>"
+    customer_id: int = -1
+    customer: Customer = dataclasses.field(init=False)
+    init_date: datetime.date = DEFAULT_DATE.date()
+    end_date: datetime.date = DEFAULT_DATE.date()
 
-        if not project_xml:
-            self.phpreport_id = -1
-            self.description = "<unknown>"
-            self.customer_id = -1
-            self.customer = Customer.find(-1)
-            self.init_date = self.end_date = datetime.datetime(1970, 1, 1)
-            return
+    def __post_init__(self):
+        super().__init__(self.phpreport_id)
+        self.customer = Customer.find(self.customer_id)
 
+    @classmethod
+    def from_element(cls, project_xml: ElementTree.Element) -> Project:
+        data: Dict[str, Any] = {}
         for child in project_xml:
-            if child.tag == "id":
-                self.phpreport_id = int(child.text)
-            if child.tag == "customerId":
-                self.customer_id = PHPReportObject.id_string_to_integer(child.text)
-                self.customer = Customer.find(self.customer_id)
-            if child.tag == "description":
-                self.description = child.text
-            if child.tag == "initDate" and child.text:
-                self.init_date = datetime.datetime.strptime(
-                    child.text, "%Y-%m-%d"
-                ).date()
-            if child.tag == "endDate" and child.text:
-                self.end_date = datetime.datetime.strptime(
-                    child.text, "%Y-%m-%d"
-                ).date()
+            if child.text and child.tag in ("init", "end"):
+                data[child.tag] = datetime.datetime.strptime(child.text, "%Y-%m-%d").date()
+            elif child.text:
+                data[child.tag] = child.text
+
+        return cls(
+            phpreport_id=int(data.get("id", "-1")),
+            description=data.get("description", "<description>"),
+            customer_id=int(data.get("customerId", "-1")),
+            init_date=data.get("init", DEFAULT_DATE.date()),
+            end_date=data.get("end", DEFAULT_DATE.date())
+        )
 
     def __str__(self):
         return self.description
@@ -226,18 +234,24 @@ class Project(PHPReportObject):
         return self.phpreport_id < other.phpreport_id
 
 
+@dataclasses.dataclass
 class User(PHPReportObject):
-    def __init__(self, user_xml):
-        if not user_xml:
-            self.phpreport_id = -1
-            self.login = "<unknown>"
-            return
+    phpreport_id: int = -1
+    login: str = "<unknown>"
 
-        for child in user_xml:
-            if child.tag == "id":
-                self.phpreport_id = int(child.text)
-            if child.tag == "login":
-                self.login = child.text
+    def __post_init__(self):
+        super().__init__(self.phpreport_id)
+
+    @classmethod
+    def from_element(cls, user_xml: ElementTree.Element) -> User:
+        data = {child.tag: child.text for child in user_xml if child.text}
+        return cls(
+            phpreport_id=int(data.get("id", "-1")),
+            login=data.get("login", "-1")
+        )
+
+    def __hash__(self):
+        return self.phpreport_id.__hash__()
 
     def __str__(self):
         return self.login
@@ -249,18 +263,21 @@ class User(PHPReportObject):
         return self.login.lower().find(term) != -1
 
 
+@dataclasses.dataclass
 class Customer(PHPReportObject):
-    def __init__(self, customer_xml):
-        if not customer_xml:
-            self.phpreport_id = -1
-            self.name = "<unknown>"
-            return
+    phpreport_id: int = -1
+    name: str = "<unknown>"
 
-        for child in customer_xml:
-            if child.tag == "id":
-                self.phpreport_id = int(child.text)
-            if child.tag == "name":
-                self.name = child.text
+    def __post_init__(self):
+        super().__init__(self.phpreport_id)
+
+    @classmethod
+    def from_element(cls, customer_xml: ElementTree.Element) -> Customer:
+        data = {child.tag: child.text for child in customer_xml if child.text}
+        return cls(
+            phpreport_id=int(data.get("id", "-1")),
+            name=data.get("name", "-1")
+        )
 
     def __str__(self):
         return self.name
@@ -279,9 +296,9 @@ def fetch_urls_in_parallel(urls):
 
 
 class PHPReport:
-    users = {}
-    projects = {}
-    customers = {}
+    users: Dict[int, User] = {}
+    projects: Dict[int, Project] = {}
+    customers: Dict[int, Customer] = {}
 
     @classmethod
     def get_contents_of_url(cls, url):
@@ -310,7 +327,6 @@ class PHPReport:
     @classmethod
     def login(cls, address=DEFAULT_PHPREPORT_ADDRESS, username=None):
         cls.address = address
-        cls.projects = {}
         cls.credential = Credential.for_url(address, username)
         cls.credential.activate()
 
@@ -338,22 +354,21 @@ class PHPReport:
         print("Loading PHPReport data...")
         responses = fetch_urls_in_parallel(
             [
-                "%s/getProjectsService.php?sid=%s"
-                % (cls.address, PHPReport.session_id),
-                "%s/getAllUsersService.php?sid=%s"
-                % (cls.address, PHPReport.session_id),
-                "%s/getUserCustomersService.php?sid=%s"
-                % (cls.address, PHPReport.session_id),
+                f"{cls.address}/getProjectsService.php?sid={PHPReport.session_id}",
+                f"{cls.address}/getAllUsersService.php?sid={PHPReport.session_id}",
+                f"{cls.address}/getUserCustomersService.php?sid={PHPReport.session_id}"
             ]
         )
-        Customer.load_all(responses[2], "customer")
-        User.load_all(responses[1], "user")
-        Project.load_all(responses[0], "project")
+
+        PHPReport.create_objects_from_response(responses[2], Customer, "customer")
+        PHPReport.create_objects_from_response(responses[1], User, "user")
+        PHPReport.create_objects_from_response(responses[0], Project, "project")
 
     @staticmethod
     def create_objects_from_response(response, cls, tag):
+        element = ElementTree.fromstring(response)
         return [
-            cls(child) for child in ElementTree.fromstring(response) if child.tag == tag
+            cls.from_element(child) for child in element if child.tag == tag
         ]
 
     @classmethod

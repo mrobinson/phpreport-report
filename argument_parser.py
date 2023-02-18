@@ -92,7 +92,7 @@ class ParsedArguments():
         # TODO: We should really support choosing selecting more than one
         # customer or project.
         if self.project is not None:
-            projects = filter_instances(list(Project.instances.values()), self.project)
+            projects = filter_instances(list(Project.all()), self.project)
             if not projects:
                 print("Could not find any projects matching '%s'" % self.project)
                 sys.exit(1)
@@ -103,7 +103,7 @@ class ParsedArguments():
                 project = projects[0]
 
         if self.customer is not None:
-            customers = filter_instances(list(Customer.instances.values()), self.customer)
+            customers = filter_instances(list(Customer.all()), self.customer)
             if not customers:
                 print("Could not find any customers matching '%s'" % self.customer)
                 sys.exit(1)
@@ -113,7 +113,8 @@ class ParsedArguments():
                 customer = customers[0]
 
         if self.user is not None:
-            users = [x for x in list(User.instances.values()) if x.login == self.user]
+            users = [x for x in User.all() if x.login == self.user]
+            print(users)
             if not users:
                 print("Could not find any users matching '%s'" % self.user)
                 sys.exit(1)
