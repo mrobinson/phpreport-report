@@ -76,10 +76,10 @@ class Credential:
     def save(self):
         if self.saved:
             return
-        if input("Store password for '%s' in keyring? (y/N) " % self.username) != "y":
+        if input(f"Store password for '{self.username}' in keyring? (y/N) ") != "y":
             return
         keyring.set_password(
-            KEYRING_SERVICE_NAME, self.url, "{}:{}".format(self.username, self.password)
+            KEYRING_SERVICE_NAME, self.url, f"{self.username}:{self.password}"
         )
 
     def activate(self):
@@ -309,19 +309,19 @@ class PHPReport:
         try:
             return urllib.request.urlopen(request).read()
         except urllib.error.URLError:
-            print("Could not complete request to %s" % sanitize_url_for_display(url))
+            print(f"Could not complete request to {sanitize_url_for_display(url)}")
             sys.exit(1)
 
     @classmethod
     def send_login_request(cls, address, username, password):
-        url = "%s/loginService.php" % address
+        url = f"{address}/loginService.php"
         request = urllib.request.Request(url, None)
-        auth_string = bytes("%s:%s" % (username, password), "UTF-8")
-        request.add_header("Authorization", "Basic %s" % base64.b64encode(auth_string))
+        auth_string = bytes(f"{username}:{password}", "UTF-8")
+        request.add_header("Authorization", f"Basic {base64.b64encode(auth_string)}")
         try:
             return urllib.request.urlopen(request).read()
         except urllib.error.URLError:
-            print("Could not complete login request to %s" % url)
+            print(f"Could not complete login request to {url}")
             sys.exit(1)
 
     @classmethod
@@ -342,9 +342,8 @@ class PHPReport:
                 cls.session_id = child.text
 
         if not cls.session_id:
-            print(
-                "Could not find session id in login response, password likely incorrect: %s"
-                % response
+            print("Could not find session id in login response, "
+                  f"password likely incorrect: {response}"
             )
             sys.exit(1)
 
@@ -420,20 +419,20 @@ class TaskFilter:
         return task_filter
 
     def to_url(self, phpreport):
-        url = "%s/getTasksFiltered.php?sid=%s&dateFormat=Y-m-d" % (
-            phpreport.address,
-            phpreport.session_id,
+        url = (
+            f"{phpreport.address}/getTasksFiltered.php" 
+            f"?sid={phpreport.session_id}&dateFormat=Y-m-d"
         )
         if self.start_date:
-            url += "&filterStartDate=%s" % self.start_date.strftime("%Y-%m-%d")
+            url += f"&filterStartDate={self.start_date.strftime('%Y-%m-%d')}"
         if self.end_date:
-            url += "&filterEndDate=%s" % self.end_date.strftime("%Y-%m-%d")
+            url += f"&filterEndDate={self.end_date.strftime('%Y-%m-%d')}"
         if self.project is not None:
-            url += "&projectId=%i" % self.project.phpreport_id
+            url += f"&projectId={self.project.phpreport_id}"
         if self.customer is not None:
-            url += "&customerId=%i" % self.customer.phpreport_id
+            url += f"&customerId={self.customer.phpreport_id}"
         if self.user is not None:
-            url += "&userId=%i" % self.user.phpreport_id
+            url += f"&userId={self.user.phpreport_id}"
         if self.task_type is not None:
             url += f"&type={self.task_type}"
         return url

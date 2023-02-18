@@ -94,7 +94,7 @@ class ParsedArguments():
         if self.project is not None:
             projects = filter_instances(list(Project.all()), self.project)
             if not projects:
-                print("Could not find any projects matching '%s'" % self.project)
+                print(f"Could not find any projects matching '{self.project}'")
                 sys.exit(1)
             elif len(projects) > 1:
                 projects.sort(reverse=True)
@@ -105,7 +105,7 @@ class ParsedArguments():
         if self.customer is not None:
             customers = filter_instances(list(Customer.all()), self.customer)
             if not customers:
-                print("Could not find any customers matching '%s'" % self.customer)
+                print(f"Could not find any customers matching '{self.customer}'")
                 sys.exit(1)
             elif len(customers) > 1:
                 customer = choose_from_list(customers)
@@ -116,7 +116,7 @@ class ParsedArguments():
             users = [x for x in User.all() if x.login == self.user]
             print(users)
             if not users:
-                print("Could not find any users matching '%s'" % self.user)
+                print(f"Could not find any users matching '{self.user}'")
                 sys.exit(1)
             elif len(users) > 1:
                 user = choose_from_list(users)
@@ -128,9 +128,10 @@ class ParsedArguments():
 def choose_from_list(items):
     assert len(items) > 1
 
-    print("\nMultiple {0}s matching description. Please choose one:".format(items[0].__class__.__name__.lower()))
+    name = items[0].__class__.__name__.lower()
+    print(f"\nMultiple {name}s matching description. Please choose one:")
     for index, item in enumerate(items):
-        print("    {0}. {1}".format(index, item))
+        print(f"    {index}. {item}")
 
     while True:
         try:
@@ -140,4 +141,5 @@ def choose_from_list(items):
         except ValueError:
             pass
 
-        print("Not a valid index. Type a number between 0 and {0} and press enter.".format(len(items) - 1))
+        print("Not a valid index. Type a number between 0 "
+              f"and {len(items) - 1} and press enter.")

@@ -13,7 +13,7 @@
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# IMPLIED WARRANTIES gF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
 # ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
 # LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 # CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
@@ -29,6 +29,8 @@ import collections
 import datetime
 import os
 import textwrap
+
+from jinja2 import Environment, FileSystemLoader
 
 from argument_parser import ArgumentParser
 from dateutils import DateUtils
@@ -185,10 +187,10 @@ class Query:
             end_date = min(self.end_date, sunday)
 
             (year_number, week_number) = DateUtils.year_and_week_number(sunday)
-            description = "Week {}, {}".format(week_number, year_number)
             output.append(
                 self.filtered(
-                    start_date=current, end_date=end_date, description=description
+                    start_date=current, end_date=end_date,
+                     description=f"Week {week_number}, {year_number}"
                 )
             )
 
@@ -197,8 +199,6 @@ class Query:
         return output
 
     def render_template(self, template):
-        from jinja2 import Environment, FileSystemLoader
-
         environment = Environment(
             loader=FileSystemLoader(
                 [
