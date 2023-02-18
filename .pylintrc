@@ -1,4 +1,4 @@
 [MESSAGES CONTROL]
-disable=locally-disabled,missing-docstring,E501
+disable=locally-disabled,missing-docstring,fixme
 max-line-length=120
 
