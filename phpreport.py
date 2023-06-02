@@ -124,7 +124,7 @@ class PHPReportObject:
         assert False, "Subclasses should override this abstract class method."
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass(frozen=True, eq=True)
 class Task(PHPReportObject):
     phpreport_id: int = -1
     user_id: int = -1
@@ -143,8 +143,8 @@ class Task(PHPReportObject):
 
     def __post_init__(self):
         super().__init__(self.phpreport_id)
-        self.user = User.find(self.user_id)
-        self.project = Project.find(self.project_id)
+        object.__setattr__(self, "user", User.find(self.user_id))
+        object.__setattr__(self, "project", Project.find(self.project_id))
 
         # There's a bug in PHPReport where 0:00 can be considered 24:00 when it's
         # used as the end time. Work around that now:
@@ -190,7 +190,7 @@ class Task(PHPReportObject):
         return self.end_time - self.init_time
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, eq=True)
 class Project(PHPReportObject):
     phpreport_id: int = -1
     description: str = "<description>"
@@ -201,7 +201,7 @@ class Project(PHPReportObject):
 
     def __post_init__(self):
         super().__init__(self.phpreport_id)
-        self.customer = Customer.find(self.customer_id)
+        object.__setattr__(self, "customer", Customer.find(self.customer_id))
 
     @classmethod
     def from_element(cls, project_xml: ElementTree.Element) -> Project:
@@ -239,7 +239,7 @@ class Project(PHPReportObject):
         return self.phpreport_id < other.phpreport_id
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, eq=True)
 class User(PHPReportObject):
     phpreport_id: int = -1
     login: str = "<unknown>"
@@ -268,7 +268,7 @@ class User(PHPReportObject):
         return self.login.lower().find(term) != -1
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, eq=True)
 class Customer(PHPReportObject):
     phpreport_id: int = -1
     name: str = "<unknown>"
