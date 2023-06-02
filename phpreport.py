@@ -150,7 +150,12 @@ class Task(PHPReportObject):
         # used as the end time. Work around that now:
         # https://trac.phpreport.igalia.com/ticket/193
         if self.end_time.hour == 0 and self.end_time.minute == 0:
-            self.end_time += datetime.timedelta(hours=24)
+            # We don't want to do this for the special PHPReport zero-hour tasks which
+            # are reported as being from 0:00 to 0:00. These tasks should remain listed
+            # as zero hours long.
+            if not (self.init_time.hour == 0 and self.end_time.minute == 0):
+                object.__setattr__(self, "end_time",
+                                   self.end_time + datetime.timedelta(hours=24))
 
     @classmethod
     def from_element(cls, task_xml: ElementTree.Element):
