@@ -1,0 +1,5 @@
+{% set days = query.days() %}
+	{% for day in days %}{{ day.description }}	{% endfor %}
+{% for user in query.users() -%}
+{{ user }}	{% for day in days %}{{ day.filtered(user=user).time_worked() | as_decimal_hours }}	{% endfor %}
+{% endfor %}
