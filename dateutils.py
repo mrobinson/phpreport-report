@@ -125,6 +125,11 @@ class DateUtils():
         return "%02i:%02i" % (hours, seconds)
 
     @staticmethod
+    def format_delta_as_decimal_hours(delta):
+        hours = (delta.days * 24) + (delta.seconds / 3600)
+        return f"{hours:.2f}"
+
+    @staticmethod
     def date_from_string(string):
         # This is useful for when a range is specified, but only one side
         # is filled (eg "w11-"). We assume the empty side should be the

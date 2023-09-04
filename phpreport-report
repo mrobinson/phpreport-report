@@ -75,10 +75,6 @@ def create_markdown_table(table):
     return "".join(output)
 
 
-def as_hours(delta):
-    return DateUtils.format_delta_as_hours(delta)
-
-
 def wrapped(content, width):
     for content_line in content.splitlines():  # Preserve existing newlines.
         for line in textwrap.wrap(
@@ -211,7 +207,10 @@ class Query:
         )
         environment.filters["user_hours_table"] = user_hours_table
         environment.filters["create_markdown_table"] = create_markdown_table
-        environment.filters["as_hours"] = as_hours
+        environment.filters["as_hours"] = \
+            lambda delta: DateUtils.format_delta_as_hours(delta)
+        environment.filters["as_decimal_hours"] = \
+            lambda delta: DateUtils.format_delta_as_decimal_hours(delta)
         environment.filters["wrapped"] = wrapped
 
         template = environment.get_template(template)
