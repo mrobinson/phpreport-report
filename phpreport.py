@@ -320,11 +320,16 @@ class PHPReport:
     @classmethod
     def send_login_request(cls, address, username, password, totp):
         url = f"{address}/loginService.php"
-        if totp:
-            query_params = {'totp': totp}
-            encoded_params = urllib.parse.urlencode(query_params)
-            url = f"{address}/loginService.php?{encoded_params}"
 
+        query_params = {}
+        if totp:
+            query_params['totp'] = totp
+
+        if query_params:
+            encoded_params = urllib.parse.urlencode(query_params)
+            url += f"?{encoded_params}"
+
+        print(url)
         request = urllib.request.Request(url, None)
         auth_string = bytes(f"{username}:{password}", "UTF-8")
         request.add_header("Authorization", f"Basic {base64.b64encode(auth_string)}")
@@ -340,7 +345,7 @@ class PHPReport:
         cls.credential = Credential.for_url(address, username)
         cls.credential.activate()
 
-        totp = getpass.getpass("2FA One-time Code (leave blank if you don't have 2FA enabled for your account): ")
+        totp = getpass.getpass("6-digit verification code (leave blank if 2FA disabled): ")
 
         print("Logging in...")
         response = cls.send_login_request(
